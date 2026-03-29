@@ -31,7 +31,9 @@ use crate::error::{Result, TanaError};
 
 // Re-export public API
 pub use format::Format;
-pub use sections::{DatabaseConfig, DefaultsConfig, DisplayConfig, FormattingConfig, ImageConfig};
+pub use sections::{
+    DatabaseConfig, DefaultsConfig, DisplayConfig, FormattingConfig, ImageConfig, ServerConfig,
+};
 
 /// Main configuration structure
 ///
@@ -54,6 +56,9 @@ pub struct Config {
     /// Image configuration
     #[serde(default)]
     pub images: ImageConfig,
+    /// Server configuration
+    #[serde(default)]
+    pub server: ServerConfig,
 }
 
 impl Config {
@@ -330,6 +335,7 @@ format = "csv"
                 default_directory: Some("~/.local/share/tana/images".to_string()),
                 auto_copy: Some(false),
             },
+            server: ServerConfig::default(),
         };
 
         assert_eq!(config.format(), Format::Json);
@@ -442,6 +448,36 @@ auto_copy = true
                 .images_default_directory()
                 .to_string_lossy()
                 .contains("custom_images")
+        );
+    }
+
+    #[test]
+    fn test_config_server_defaults() {
+        let config = Config::default();
+        assert_eq!(
+            config.server.cors_origins,
+            Some(vec![
+                "http://localhost:3000".to_string(),
+                "http://localhost:8080".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_config_with_server_section() {
+        let toml_content = r#"
+[server]
+cors_origins = ["http://localhost:3000", "https://example.com"]
+"#;
+
+        let config: Config = toml::from_str(toml_content).unwrap();
+
+        assert_eq!(
+            config.server.cors_origins,
+            Some(vec![
+                "http://localhost:3000".to_string(),
+                "https://example.com".to_string(),
+            ])
         );
     }
 }

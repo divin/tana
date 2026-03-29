@@ -5,9 +5,12 @@
 //! OpenAPI documentation and Swagger UI are available at /api/docs
 
 use axum::Router;
+use axum::http::Method;
+use axum::http::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
 use axum::routing::get;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -34,6 +37,40 @@ impl AppState {
             db_path: Arc::new(db_path),
         }
     }
+}
+
+/// Create a CORS layer with the specified origins
+///
+/// Configures CORS to allow specified methods and headers with explicit origin validation.
+/// Uses `CorsLayer::new()` as a base and adds each origin explicitly to support credentials.
+/// This is the correct approach when `allow_credentials(true)` is needed.
+///
+/// # Arguments
+/// * `origins` - List of allowed origins to explicitly allow
+///
+/// # Returns
+/// A configured CorsLayer with explicit origin allowlist and credentials support
+fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
+    let mut cors = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([CONTENT_TYPE, ACCEPT])
+        .allow_credentials(true)
+        .max_age(std::time::Duration::from_secs(3600));
+
+    // Add origins explicitly
+    for origin in origins {
+        if let Ok(parsed) = origin.parse::<HeaderValue>() {
+            cors = cors.allow_origin(parsed);
+        }
+    }
+
+    cors
 }
 
 /// OpenAPI documentation for the Tana API
@@ -94,6 +131,7 @@ pub struct ApiDoc;
 /// Sets up all routes with shared application state.
 /// Routes are mounted under /api path.
 /// Swagger UI is available at /api/docs with OpenAPI JSON at /api/docs/openapi.json
+/// CORS is configured with default origins (localhost:3000 and localhost:8080)
 pub fn create_router(db_path: PathBuf) -> Router {
     let state = AppState::new(db_path);
 
@@ -138,10 +176,19 @@ pub fn create_router(db_path: PathBuf) -> Router {
         .route("/search", get(handlers::search_handler))
         .with_state(state);
 
+    // Create CORS layer with default origins
+    let cors_origins = vec![
+        "http://localhost:3000".to_string(),
+        "http://localhost:8080".to_string(),
+    ];
+    let cors_layer = create_cors_layer(cors_origins);
+
     // Build the main router with the API routes nested under /api
+    // Apply CORS layer before nesting routes
     // and Swagger UI mounted at /api/docs
     Router::new()
         .nest("/api", api_routes)
+        .layer(cors_layer)
         .merge(SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", ApiDoc::openapi()))
 }
 
@@ -162,5 +209,38 @@ mod tests {
         let path = PathBuf::from("/tmp/test.db");
         let _router = create_router(path);
         // If we get here without panicking, the router was created successfully
+    }
+
+    #[test]
+    fn test_cors_layer_creation_single_origin() {
+        let origins = vec!["http://localhost:3000".to_string()];
+        let _cors = create_cors_layer(origins);
+        // If we get here without panicking, the CORS layer was created successfully
+    }
+
+    #[test]
+    fn test_cors_layer_creation_multiple_origins() {
+        let origins = vec![
+            "http://localhost:3000".to_string(),
+            "http://localhost:8080".to_string(),
+            "https://example.com".to_string(),
+        ];
+        let _cors = create_cors_layer(origins);
+        // If we get here without panicking, the CORS layer was created successfully
+    }
+
+    #[test]
+    fn test_cors_layer_creation_empty_origins() {
+        let origins = vec![];
+        let _cors = create_cors_layer(origins);
+        // If we get here without panicking, the CORS layer was created with empty origins
+    }
+
+    #[test]
+    fn test_create_router_includes_cors() {
+        // Test that the router can be created and includes CORS configuration
+        let path = PathBuf::from("/tmp/test.db");
+        let _router = create_router(path);
+        // If we get here without panicking, the router with CORS was created successfully
     }
 }

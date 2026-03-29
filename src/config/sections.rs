@@ -109,6 +109,29 @@ impl Default for ImageConfig {
     }
 }
 
+/// Server configuration section
+///
+/// Handles server-related settings, including CORS (Cross-Origin Resource Sharing).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerConfig {
+    /// CORS allowed origins
+    ///
+    /// List of origins that are allowed to make cross-origin requests.
+    /// If not specified, defaults to http://localhost:3000 and http://localhost:8080.
+    pub cors_origins: Option<Vec<String>>,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            cors_origins: Some(vec![
+                "http://localhost:3000".to_string(),
+                "http://localhost:8080".to_string(),
+            ]),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +230,41 @@ auto_copy = true
             Some("~/Pictures/tana".to_string())
         );
         assert_eq!(config.auto_copy, Some(true));
+    }
+
+    #[test]
+    fn test_server_config_default() {
+        let config = ServerConfig::default();
+        assert_eq!(
+            config.cors_origins,
+            Some(vec![
+                "http://localhost:3000".to_string(),
+                "http://localhost:8080".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_server_config_from_toml() {
+        let toml_content = r#"
+cors_origins = ["http://localhost:3000", "http://example.com"]
+"#;
+        let config: ServerConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(
+            config.cors_origins,
+            Some(vec![
+                "http://localhost:3000".to_string(),
+                "http://example.com".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_server_config_empty_origins() {
+        let toml_content = r#"
+cors_origins = []
+"#;
+        let config: ServerConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.cors_origins, Some(vec![]));
     }
 }
