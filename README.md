@@ -1,10 +1,40 @@
 # Tana - Media Tracking CLI Tool
 
-Tana (Japanese (棚) for "shelf") is a lightweight Rust CLI tool for tracking movies, TV series, and books you've consumed. Built with SQLite for persistent storage and designed with extensibility in mind for future media types. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
+Tana (Japanese: 棚 for "shelf") is a lightweight Rust CLI tool for tracking movies, TV series, and books you've consumed. Built with SQLite for persistent storage and designed with extensibility in mind for future media types. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
 
-## AI Disclaimer
+## 🚀 Quick Start
 
-This project was developed with the assistance of GitHub Copilot, an AI code generation tool. I know this is a controversial topic. While Copilot helped me speed up development and provided useful suggestions, all code was reviewed and edited by me to ensure quality and correctness. The final implementation reflects my design choices and coding style. Below is a bit of my take on using AI tools in software development, if you are interested.
+### Installation
+```bash
+cargo install --path .
+```
+
+### Basic Usage
+```bash
+# Add a movie
+tana add movie "The Matrix" --rating 9.0
+
+# Add a book
+tana add book "1984" --rating 8.5
+
+# Show all movies
+tana show movies
+
+# Show all books
+tana show books
+
+# Edit an entry
+tana edit movie 1 --rating 9.5
+```
+
+For more detailed commands and options, run:
+```bash
+tana --help
+```
+
+## 🤖 AI Disclaimer
+
+This project was developed with the assistance of GitHub Copilot, an AI code generation tool. I know this is a controversial topic. While Copilot helped me speed up development and provided useful suggestions, all code was reviewed and edited by me to ensure quality and correctness. The final implementation reflects my design choices and coding style. Below is a bit of my take on using AI tools in software development, if you're interested.
 
 <details>
   <summary>My Take on AI Assistance</summary>
@@ -13,7 +43,7 @@ This project was developed with the assistance of GitHub Copilot, an AI code gen
   
 </details>
 
-## License
+## 📜 License
 
 Licensed under either of
 
@@ -24,7 +54,7 @@ Licensed under either of
 
 at your option.
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Database Not Found
 If you get a "database not found" error, the database will be created automatically on the first run. Make sure the `~/.local/share/tana/` directory exists and is writable.
@@ -41,8 +71,13 @@ rm ~/.local/share/tana/tana.db
 
 The database will be recreated with a fresh schema on the next run.
 
+### Debug Information
+Run with the `--debug` flag to see detailed logs:
+```bash
+tana --debug show movies
+```
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please ensure:
 - All tests pass: `cargo test`
@@ -50,13 +85,6 @@ Contributions are welcome! Please ensure:
 - Code is formatted: `cargo fmt`
 - Clippy is happy: `cargo clippy`
 
-
-### Debug Information
-Run with the `--debug` flag to see detailed logs:
-```bash
-tana --debug show movies
-```
-
 ---
 
-Made with ❤️ in Rust with support from GitHub Copilot. Happy tracking!
+Made with ❤️ in Rust with support from GitHub Copilot. Happy tracking! 📚🎥
