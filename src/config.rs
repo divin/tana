@@ -3,127 +3,41 @@
 //! Handles loading and parsing TOML configuration files.
 //! Configuration files are expected at `~/.config/tana/config.toml` (XDG standard)
 //! or `~/.tanarc` (fallback for backwards compatibility).
+//!
+//! # Module Structure
+//!
+//! Following RFC 1733, this module is organized as a hub with submodules:
+//! - `format`: Format enum for output formats (plain, csv, json)
+//! - `sections`: Configuration section structs (database, display, formatting, defaults, image)
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use tana::config::Config;
+//!
+//! let config = Config::load()?;
+//! let db_path = config.database_path();
+//! let output_format = config.format();
+//! ```
 
-use serde::{Deserialize, Serialize};
+pub mod format;
+pub mod sections;
+
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::error::{Result, TanaError};
 
-/// Display format options
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum Format {
-    /// Plain text output
-    #[default]
-    Plain,
-    /// CSV format
-    Csv,
-    /// JSON format
-    Json,
-}
-
-impl std::str::FromStr for Format {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "plain" => Ok(Format::Plain),
-            "csv" => Ok(Format::Csv),
-            "json" => Ok(Format::Json),
-            _ => Err(format!(
-                "Invalid format: {}. Valid options: plain, csv, json",
-                s
-            )),
-        }
-    }
-}
-
-impl std::fmt::Display for Format {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Format::Plain => write!(f, "plain"),
-            Format::Csv => write!(f, "csv"),
-            Format::Json => write!(f, "json"),
-        }
-    }
-}
-
-/// Database configuration section
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DatabaseConfig {
-    /// Path to the SQLite database file
-    pub path: Option<String>,
-}
-
-/// Display configuration section
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DisplayConfig {
-    /// Output format (plain, csv, json)
-    pub format: Option<Format>,
-    /// Enable debug mode for verbose logging
-    pub debug: Option<bool>,
-    /// Number of results to display per page
-    pub results_per_page: Option<u32>,
-}
-
-impl Default for DisplayConfig {
-    fn default() -> Self {
-        Self {
-            format: Some(Format::Plain),
-            debug: Some(false),
-            results_per_page: Some(20),
-        }
-    }
-}
-
-/// Formatting configuration section
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FormattingConfig {
-    /// Maximum length for truncated strings
-    pub truncate_length: Option<usize>,
-    /// Date format string (chrono format)
-    pub date_format: Option<String>,
-}
-
-impl Default for FormattingConfig {
-    fn default() -> Self {
-        Self {
-            truncate_length: Some(50),
-            date_format: Some("%Y-%m-%d".to_string()),
-        }
-    }
-}
-
-/// Default values for add commands
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DefaultsConfig {
-    /// Default rating for new entries (1-10)
-    pub default_rating: Option<f64>,
-    /// Default year for new entries
-    pub default_year: Option<i32>,
-}
-
-/// Image configuration section
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImageConfig {
-    /// Default directory to store image files
-    pub default_directory: Option<String>,
-    /// Whether to auto-copy images to default directory
-    pub auto_copy: Option<bool>,
-}
-
-impl Default for ImageConfig {
-    fn default() -> Self {
-        Self {
-            default_directory: None,
-            auto_copy: Some(false),
-        }
-    }
-}
+// Re-export public API
+pub use format::Format;
+pub use sections::{DatabaseConfig, DefaultsConfig, DisplayConfig, FormattingConfig, ImageConfig};
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+///
+/// Combines all configuration sections (database, display, formatting, defaults, images)
+/// and provides convenient methods to access configuration values with defaults.
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     /// Database configuration
     #[serde(default)]
@@ -150,6 +64,10 @@ impl Config {
     /// 2. `~/.tanarc` (fallback)
     ///
     /// If neither file exists, returns Config with defaults.
+    ///
+    /// # Returns
+    /// * `Ok(Config)` - Successfully loaded or default configuration
+    /// * `Err(TanaError)` - File read or parsing error
     pub fn load() -> Result<Self> {
         let config_paths = vec![get_xdg_config_path(), get_legacy_config_path()];
 
@@ -172,6 +90,9 @@ impl Config {
     }
 
     /// Get the database path, preferring config value over default
+    ///
+    /// # Returns
+    /// Path to the database file with home directory expanded
     pub fn database_path(&self) -> PathBuf {
         if let Some(path) = &self.database.path {
             expand_home(path)
@@ -216,6 +137,9 @@ impl Config {
     }
 
     /// Get the images default directory, preferring config value over default
+    ///
+    /// # Returns
+    /// Path to the images directory with home directory expanded
     pub fn images_default_directory(&self) -> PathBuf {
         if let Some(path) = &self.images.default_directory {
             expand_home(path)
@@ -231,6 +155,9 @@ impl Config {
 }
 
 /// Expand home directory in path (~/)
+///
+/// Replaces the leading `~` with the user's home directory.
+/// If HOME environment variable is not set, returns the path as-is.
 fn expand_home(path: &str) -> PathBuf {
     if path.starts_with("~") {
         if let Ok(home) = std::env::var("HOME") {
@@ -244,6 +171,8 @@ fn expand_home(path: &str) -> PathBuf {
 }
 
 /// Get the XDG-compliant config path: ~/.config/tana/config.toml
+///
+/// Uses XDG_CONFIG_HOME environment variable if set, otherwise defaults to ~/.config.
 fn get_xdg_config_path() -> PathBuf {
     let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
         PathBuf::from(xdg_config)
@@ -257,6 +186,8 @@ fn get_xdg_config_path() -> PathBuf {
 }
 
 /// Get the legacy config path: ~/.tanarc
+///
+/// Used for backwards compatibility with older configuration file location.
 fn get_legacy_config_path() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
         PathBuf::from(home).join(".tanarc")
@@ -266,6 +197,8 @@ fn get_legacy_config_path() -> PathBuf {
 }
 
 /// Get the default database path: ~/.local/share/tana/tana.db
+///
+/// Uses XDG_DATA_HOME environment variable if set, otherwise defaults to ~/.local/share.
 fn get_default_db_path() -> PathBuf {
     let data_dir = if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
         PathBuf::from(xdg_data)
@@ -279,6 +212,8 @@ fn get_default_db_path() -> PathBuf {
 }
 
 /// Get the default images directory: ~/.local/share/tana/images
+///
+/// Uses XDG_DATA_HOME environment variable if set, otherwise defaults to ~/.local/share.
 fn get_default_images_directory() -> PathBuf {
     let data_dir = if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
         PathBuf::from(xdg_data)
@@ -292,6 +227,8 @@ fn get_default_images_directory() -> PathBuf {
 }
 
 /// Apply defaults to optional config fields
+///
+/// Fills in default values for any optional config fields that are None.
 fn apply_defaults(config: &mut Config) {
     if config.display.format.is_none() {
         config.display.format = Some(Format::Plain);
@@ -322,21 +259,6 @@ mod tests {
         assert_eq!(config.results_per_page(), 20);
         assert_eq!(config.truncate_length(), 50);
         assert_eq!(config.date_format(), "%Y-%m-%d");
-    }
-
-    #[test]
-    fn test_format_from_str() {
-        assert_eq!("plain".parse::<Format>().unwrap(), Format::Plain);
-        assert_eq!("csv".parse::<Format>().unwrap(), Format::Csv);
-        assert_eq!("json".parse::<Format>().unwrap(), Format::Json);
-        assert_eq!("PLAIN".parse::<Format>().unwrap(), Format::Plain);
-    }
-
-    #[test]
-    fn test_format_display() {
-        assert_eq!(Format::Plain.to_string(), "plain");
-        assert_eq!(Format::Csv.to_string(), "csv");
-        assert_eq!(Format::Json.to_string(), "json");
     }
 
     #[test]
@@ -450,18 +372,6 @@ format = "csv"
     fn test_default_images_directory() {
         let path = get_default_images_directory();
         assert!(path.to_string_lossy().contains("tana/images"));
-    }
-
-    #[test]
-    fn test_image_config_default() {
-        let config = Config::default();
-        assert_eq!(config.images_auto_copy(), false);
-        assert!(
-            config
-                .images_default_directory()
-                .to_string_lossy()
-                .contains("tana/images")
-        );
     }
 
     #[test]
