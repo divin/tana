@@ -3,7 +3,7 @@
 use clap::{Args, Subcommand};
 use tracing::debug;
 
-use crate::db::{queries, schema::SchemaInfo, Database};
+use crate::db::{Database, queries, schema::SchemaInfo};
 use crate::error::Result;
 
 /// Arguments for the stats command
@@ -77,11 +77,7 @@ fn show_movies_stats(db: &Database) -> Result<()> {
     }
 
     let count = movies.len();
-    let avg_rating = movies
-        .iter()
-        .filter_map(|m| m.rating)
-        .sum::<f64>()
-        / count.max(1) as f64;
+    let avg_rating = movies.iter().filter_map(|m| m.rating).sum::<f64>() / count.max(1) as f64;
     let rated_count = movies.iter().filter(|m| m.rating.is_some()).count();
 
     println!("\n{:=^50}", " Movie Statistics ");
@@ -107,14 +103,13 @@ fn show_series_stats(db: &Database) -> Result<()> {
     }
 
     let count = series_list.len();
-    let completed = series_list.iter().filter(|s| s.status == "completed").count();
+    let completed = series_list
+        .iter()
+        .filter(|s| s.status == "completed")
+        .count();
     let ongoing = series_list.iter().filter(|s| s.status == "ongoing").count();
 
-    let avg_rating = series_list
-        .iter()
-        .filter_map(|s| s.rating)
-        .sum::<f64>()
-        / count.max(1) as f64;
+    let avg_rating = series_list.iter().filter_map(|s| s.rating).sum::<f64>() / count.max(1) as f64;
 
     println!("\n{:=^50}", " TV Series Statistics ");
     println!();
@@ -141,11 +136,7 @@ fn show_books_stats(db: &Database) -> Result<()> {
     }
 
     let count = books.len();
-    let avg_rating = books
-        .iter()
-        .filter_map(|b| b.rating)
-        .sum::<f64>()
-        / count.max(1) as f64;
+    let avg_rating = books.iter().filter_map(|b| b.rating).sum::<f64>() / count.max(1) as f64;
 
     let total_pages: i32 = books.iter().filter_map(|b| b.pages).sum();
 

@@ -14,4 +14,3 @@ pub use delete::delete;
 pub use get::{get_all, get_by_id, get_by_year};
 pub use insert::insert;
 pub use update::update;
-
