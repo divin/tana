@@ -65,6 +65,7 @@ pub struct SeriesEntry {
     pub started_date: String,
     pub completed_date: Option<String>,
     pub notes: Option<String>,
+    pub poster_path: Option<String>,
 }
 
 impl From<TVSeries> for SeriesEntry {
@@ -81,6 +82,7 @@ impl From<TVSeries> for SeriesEntry {
             started_date: series.started_date,
             completed_date: series.completed_date,
             notes: series.notes,
+            poster_path: series.poster_path.clone(),
         }
     }
 }
@@ -190,5 +192,31 @@ mod tests {
         assert_eq!(entry.title, "Breaking Bad");
         assert_eq!(entry.status, "completed");
         assert_eq!(entry.rating, Some(9.5));
+    }
+
+    #[test]
+    fn test_series_entry_with_poster_path() {
+        let series = TVSeries {
+            id: Some(1),
+            title: "Breaking Bad".to_string(),
+            release_year: Some(2008),
+            status: "completed".to_string(),
+            total_seasons: Some(5),
+            current_season: Some(5),
+            current_episode: Some(16),
+            rating: Some(9.5),
+            started_date: "2024-01-01".to_string(),
+            completed_date: Some("2024-12-31".to_string()),
+            notes: Some("Great show!".to_string()),
+            poster_path: Some("/images/posters/breaking_bad.jpg".to_string()),
+        };
+
+        let entry: SeriesEntry = series.into();
+        assert_eq!(entry.id, 1);
+        assert_eq!(entry.title, "Breaking Bad");
+        assert_eq!(
+            entry.poster_path,
+            Some("/images/posters/breaking_bad.jpg".to_string())
+        );
     }
 }

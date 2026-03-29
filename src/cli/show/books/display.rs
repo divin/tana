@@ -29,6 +29,7 @@ pub struct BookEntry {
     pub completed_date: String,
     pub isbn: Option<String>,
     pub notes: Option<String>,
+    pub cover_path: Option<String>,
 }
 
 impl From<Book> for BookEntry {
@@ -43,6 +44,7 @@ impl From<Book> for BookEntry {
             completed_date: book.completed_date,
             isbn: book.isbn,
             notes: book.notes,
+            cover_path: book.cover_path.clone(),
         }
     }
 }
@@ -70,12 +72,12 @@ pub fn display_plain(books: &[Book], truncate_length: usize) {
         return;
     }
 
-    println!("\n{:=^120}", " Books ");
+    println!("\n{:=^145}", " Books ");
     println!(
-        "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12}",
-        "ID", "Title", "Author", "Genre", "Pages", "Rating", "Completed"
+        "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12} {:<25}",
+        "ID", "Title", "Author", "Genre", "Pages", "Rating", "Completed", "Cover Path"
     );
-    println!("{}", "=".repeat(120));
+    println!("{}", "=".repeat(145));
 
     for book in books {
         let title = truncate(&book.title, truncate_length.min(28));
@@ -94,15 +96,22 @@ pub fn display_plain(books: &[Book], truncate_length: usize) {
             .map(|r| format!("{}/10", r))
             .unwrap_or_else(|| "—".to_string());
 
+        let cover_path = book
+            .cover_path
+            .as_ref()
+            .map(|p| truncate(p, truncate_length.min(23)))
+            .unwrap_or_else(|| "N/A".to_string());
+
         println!(
-            "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12}",
+            "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12} {:<25}",
             book.id.unwrap_or(0),
             title,
             author,
             genre,
             pages,
             rating,
-            book.completed_date
+            book.completed_date,
+            cover_path
         );
     }
     println!();
@@ -145,7 +154,7 @@ pub fn display_json(books: &[Book]) -> Result<()> {
 /// * `books` - Slice of books to export as CSV
 /// * `_truncate_length` - Truncate length (not used for CSV format but maintained for API consistency)
 pub fn display_csv(books: &[Book], _truncate_length: usize) {
-    println!("ID,Title,Author,Genre,Pages,Rating,CompletedDate,ISBN,Notes");
+    println!("ID,Title,Author,Genre,Pages,Rating,CompletedDate,ISBN,Notes,CoverPath");
     for book in books {
         let title = escape_csv(&book.title);
         let author = escape_csv(&book.author);
@@ -166,9 +175,14 @@ pub fn display_csv(books: &[Book], _truncate_length: usize) {
             .as_ref()
             .map(|n| escape_csv(n))
             .unwrap_or_default();
+        let cover_path = book
+            .cover_path
+            .as_ref()
+            .map(|p| escape_csv(p))
+            .unwrap_or_default();
 
         println!(
-            "{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{}",
             book.id.unwrap_or(0),
             title,
             author,
@@ -177,7 +191,8 @@ pub fn display_csv(books: &[Book], _truncate_length: usize) {
             rating,
             escape_csv(&book.completed_date),
             isbn,
-            notes
+            notes,
+            cover_path
         );
     }
 }
@@ -259,5 +274,27 @@ mod tests {
 
         let entry: BookEntry = book.into();
         assert_eq!(entry.id, 0);
+    }
+
+    #[test]
+    fn test_book_entry_with_cover_path() {
+        let book = Book {
+            id: Some(42),
+            title: "The Hobbit".to_string(),
+            author: "J.R.R. Tolkien".to_string(),
+            isbn: Some("978-0547928227".to_string()),
+            genre: Some("Fantasy".to_string()),
+            pages: Some(310),
+            rating: Some(9.2),
+            started_date: Some("2024-01-01".to_string()),
+            completed_date: "2024-03-15".to_string(),
+            notes: Some("An excellent adventure".to_string()),
+            cover_path: Some("/covers/the_hobbit.jpg".to_string()),
+        };
+
+        let entry: BookEntry = book.into();
+        assert_eq!(entry.id, 42);
+        assert_eq!(entry.title, "The Hobbit");
+        assert_eq!(entry.cover_path, Some("/covers/the_hobbit.jpg".to_string()));
     }
 }

@@ -27,15 +27,15 @@ pub fn display_plain(series_list: &[TVSeries], _truncate_length: usize) {
         return;
     }
 
-    println!("\n{:=^120}", " TV Series ");
+    println!("\n{:=^130}", " TV Series ");
     println!(
-        "{:<4} {:<35} {:<8} {:<12} {:<12} {:<8}",
-        "ID", "Title", "Year", "Status", "Progress", "Rating"
+        "{:<4} {:<30} {:<8} {:<12} {:<12} {:<8} {:<40}",
+        "ID", "Title", "Year", "Status", "Progress", "Rating", "Poster Path"
     );
-    println!("{}", "=".repeat(120));
+    println!("{}", "=".repeat(130));
 
     for series in series_list {
-        let title = truncate(&series.title, 33);
+        let title = truncate(&series.title, 28);
         let status = truncate(&series.status, 10);
         let progress = if let (Some(season), Some(episode)) =
             (series.current_season, series.current_episode)
@@ -52,15 +52,21 @@ pub fn display_plain(series_list: &[TVSeries], _truncate_length: usize) {
             .release_year
             .map(|y| y.to_string())
             .unwrap_or_else(|| "—".to_string());
+        let poster_path = series
+            .poster_path
+            .as_ref()
+            .map(|p| truncate(p, 38))
+            .unwrap_or_else(|| "N/A".to_string());
 
         println!(
-            "{:<4} {:<35} {:<8} {:<12} {:<12} {:<8}",
+            "{:<4} {:<30} {:<8} {:<12} {:<12} {:<8} {:<40}",
             series.id.unwrap_or(0),
             title,
             year,
             status,
             progress,
-            rating
+            rating,
+            poster_path
         );
     }
     println!();
@@ -85,7 +91,7 @@ pub fn display_csv(series_list: &[TVSeries], _truncate_length: usize) {
     use super::super::format::escape_csv;
 
     println!(
-        "ID,Title,Year,Status,TotalSeasons,CurrentSeason,CurrentEpisode,Rating,StartedDate,CompletedDate,Notes"
+        "ID,Title,Year,Status,TotalSeasons,CurrentSeason,CurrentEpisode,Rating,StartedDate,CompletedDate,Notes,PosterPath"
     );
     for series in series_list {
         let title = escape_csv(&series.title);
@@ -117,9 +123,14 @@ pub fn display_csv(series_list: &[TVSeries], _truncate_length: usize) {
             .as_ref()
             .map(|n| escape_csv(n))
             .unwrap_or_default();
+        let poster_path = series
+            .poster_path
+            .as_ref()
+            .map(|p| escape_csv(p))
+            .unwrap_or_default();
 
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{}",
             series.id.unwrap_or(0),
             title,
             year,
@@ -130,7 +141,8 @@ pub fn display_csv(series_list: &[TVSeries], _truncate_length: usize) {
             rating,
             escape_csv(&series.started_date),
             completed_date,
-            notes
+            notes,
+            poster_path
         );
     }
 }

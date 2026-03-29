@@ -20,6 +20,7 @@ pub struct MovieEntry {
     pub rating: Option<f64>,
     pub watched_date: String,
     pub notes: Option<String>,
+    pub poster_path: Option<String>,
 }
 
 impl From<Movie> for MovieEntry {
@@ -32,6 +33,7 @@ impl From<Movie> for MovieEntry {
             rating: movie.rating,
             watched_date: movie.watched_date,
             notes: movie.notes,
+            poster_path: movie.poster_path.clone(),
         }
     }
 }
@@ -50,12 +52,12 @@ pub fn display_plain(movies: &[Movie], _truncate_length: usize) {
         return;
     }
 
-    println!("\n{:=^100}", " Movies ");
+    println!("\n{:=^115}", " Movies ");
     println!(
-        "{:<4} {:<40} {:<8} {:<20} {:<8}",
-        "ID", "Title", "Year", "Director", "Rating"
+        "{:<4} {:<40} {:<8} {:<20} {:<8} {:<12}",
+        "ID", "Title", "Year", "Director", "Rating", "Poster"
     );
-    println!("{}", "=".repeat(100));
+    println!("{}", "=".repeat(115));
 
     for movie in movies {
         let title = super::sort::truncate(&movie.title, 38);
@@ -72,14 +74,20 @@ pub fn display_plain(movies: &[Movie], _truncate_length: usize) {
             .release_year
             .map(|y| y.to_string())
             .unwrap_or_else(|| "—".to_string());
+        let poster = movie
+            .poster_path
+            .as_ref()
+            .map(|p| super::sort::truncate(p, 10))
+            .unwrap_or_else(|| "N/A".to_string());
 
         println!(
-            "{:<4} {:<40} {:<8} {:<20} {:<8}",
+            "{:<4} {:<40} {:<8} {:<20} {:<8} {:<12}",
             movie.id.unwrap_or(0),
             title,
             year,
             director,
-            rating
+            rating,
+            poster
         );
     }
     println!();
@@ -113,7 +121,7 @@ pub fn display_json(movies: &[Movie]) -> Result<()> {
 pub fn display_csv(movies: &[Movie], _truncate_length: usize) {
     use super::super::format::escape_csv;
 
-    println!("ID,Title,Year,Director,Rating,WatchedDate,Notes");
+    println!("ID,Title,Year,Director,Rating,WatchedDate,Notes,PosterPath");
     for movie in movies {
         let title = escape_csv(&movie.title);
         let director = movie
@@ -131,16 +139,22 @@ pub fn display_csv(movies: &[Movie], _truncate_length: usize) {
             .as_ref()
             .map(|n| escape_csv(n))
             .unwrap_or_default();
+        let poster_path = movie
+            .poster_path
+            .as_ref()
+            .map(|p| escape_csv(p))
+            .unwrap_or_default();
 
         println!(
-            "{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{}",
             movie.id.unwrap_or(0),
             title,
             year,
             director,
             rating,
             escape_csv(&movie.watched_date),
-            notes
+            notes,
+            poster_path
         );
     }
 }
@@ -170,5 +184,29 @@ mod tests {
         assert_eq!(entry.year, Some(2020));
         assert_eq!(entry.director, Some("Test Director".to_string()));
         assert_eq!(entry.rating, Some(8.5));
+    }
+
+    #[test]
+    fn test_movie_entry_with_poster_path() {
+        use crate::db::models::Movie;
+
+        let movie = Movie {
+            id: Some(2),
+            title: "Poster Movie".to_string(),
+            release_year: Some(2023),
+            director: Some("Test Director".to_string()),
+            rating: Some(7.5),
+            watched_date: "2024-01-15".to_string(),
+            notes: Some("Great poster!".to_string()),
+            poster_path: Some("/images/posters/test.jpg".to_string()),
+        };
+
+        let entry: MovieEntry = movie.into();
+        assert_eq!(entry.id, 2);
+        assert_eq!(entry.title, "Poster Movie");
+        assert_eq!(
+            entry.poster_path,
+            Some("/images/posters/test.jpg".to_string())
+        );
     }
 }
