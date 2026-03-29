@@ -77,7 +77,7 @@ mod tests {
         let ctx = AppContext::new(db, config);
 
         assert_eq!(ctx.format(), crate::config::Format::Plain);
-        assert_eq!(ctx.debug(), false);
+        assert!(!ctx.debug());
     }
 
     #[test]

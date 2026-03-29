@@ -260,7 +260,7 @@ mod tests {
     fn test_config_default() {
         let config = Config::default();
         assert_eq!(config.format(), Format::Plain);
-        assert_eq!(config.debug(), false);
+        assert!(!config.debug());
         assert_eq!(config.results_per_page(), 20);
         assert_eq!(config.truncate_length(), 50);
         assert_eq!(config.date_format(), "%Y-%m-%d");
@@ -289,7 +289,7 @@ default_year = 2024
         let config: Config = toml::from_str(toml_content).unwrap();
 
         assert_eq!(config.format(), Format::Json);
-        assert_eq!(config.debug(), true);
+        assert!(config.debug());
         assert_eq!(config.results_per_page(), 50);
         assert_eq!(config.truncate_length(), 80);
         assert_eq!(config.date_format(), "%d/%m/%Y");
@@ -308,7 +308,7 @@ format = "csv"
         apply_defaults(&mut config);
 
         assert_eq!(config.format(), Format::Csv);
-        assert_eq!(config.debug(), false);
+        assert!(!config.debug());
         assert_eq!(config.results_per_page(), 20);
     }
 
@@ -339,7 +339,7 @@ format = "csv"
         };
 
         assert_eq!(config.format(), Format::Json);
-        assert_eq!(config.debug(), true);
+        assert!(config.debug());
         assert_eq!(config.results_per_page(), 100);
         assert_eq!(config.truncate_length(), 100);
         assert_eq!(config.date_format(), "%Y/%m/%d");
@@ -390,7 +390,7 @@ auto_copy = true
 
         let config: Config = toml::from_str(toml_content).unwrap();
 
-        assert_eq!(config.images_auto_copy(), true);
+        assert!(config.images_auto_copy());
         assert!(
             config
                 .images_default_directory()
@@ -408,7 +408,7 @@ auto_copy = true
 
         let config: Config = toml::from_str(toml_content).unwrap();
 
-        assert_eq!(config.images_auto_copy(), true);
+        assert!(config.images_auto_copy());
         assert!(
             config
                 .images_default_directory()
@@ -441,8 +441,8 @@ auto_copy = true
         let config: Config = toml::from_str(toml_content).unwrap();
 
         assert_eq!(config.format(), Format::Json);
-        assert_eq!(config.debug(), true);
-        assert_eq!(config.images_auto_copy(), true);
+        assert!(config.debug());
+        assert!(config.images_auto_copy());
         assert!(
             config
                 .images_default_directory()
