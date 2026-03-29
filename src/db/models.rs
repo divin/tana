@@ -41,7 +41,7 @@ impl MediaEnum {
     }
 
     /// Parse a string into a MediaTypeEnum
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "movie" | "movies" => Some(MediaEnum::Movie),
             "series" | "tv" | "tv_series" => Some(MediaEnum::Series),
@@ -70,10 +70,10 @@ mod tests {
 
     #[test]
     fn test_media_type_enum_from_str() {
-        assert_eq!(MediaEnum::from_str("movie"), Some(MediaEnum::Movie));
-        assert_eq!(MediaEnum::from_str("series"), Some(MediaEnum::Series));
-        assert_eq!(MediaEnum::from_str("book"), Some(MediaEnum::Book));
-        assert_eq!(MediaEnum::from_str("invalid"), None);
+        assert_eq!(MediaEnum::parse_from_str("movie"), Some(MediaEnum::Movie));
+        assert_eq!(MediaEnum::parse_from_str("series"), Some(MediaEnum::Series));
+        assert_eq!(MediaEnum::parse_from_str("book"), Some(MediaEnum::Book));
+        assert_eq!(MediaEnum::parse_from_str("invalid"), None);
     }
 
     #[test]

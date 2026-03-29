@@ -58,16 +58,16 @@ impl From<String> for TanaError {
 impl TanaError {
     /// Create a new migration error
     pub fn migration<S: Into<String>>(msg: S) -> Self {
-        return TanaError::Migration(msg.into());
+        TanaError::Migration(msg.into())
     }
 
     /// Create a new input validation error
     pub fn invalid_input<S: Into<String>>(msg: S) -> Self {
-        return TanaError::InvalidInput(msg.into());
+        TanaError::InvalidInput(msg.into())
     }
 
     /// Create a new generic error
     pub fn other<S: Into<String>>(msg: S) -> Self {
-        return TanaError::Other(msg.into());
+        TanaError::Other(msg.into())
     }
 }

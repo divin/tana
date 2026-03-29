@@ -182,7 +182,7 @@ pub fn execute(db: &Database, args: BooksShowArgs) -> Result<()> {
 
     // Apply minimum rating filter
     if let Some(min_rating) = args.min_rating {
-        books.retain(|b| b.rating.map_or(false, |r| r >= min_rating));
+        books.retain(|b| b.rating.is_some_and(|r| r >= min_rating));
     }
 
     // Apply sorting

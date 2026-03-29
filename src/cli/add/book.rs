@@ -53,10 +53,10 @@ pub struct BookArgs {
 /// Add a book to the database
 pub fn execute(db: &Database, args: BookArgs) -> Result<()> {
     // Validate rating
-    if let Some(rating) = args.rating {
-        if rating < 0.0 || rating > 10.0 {
-            return Err(crate::TanaError::InvalidRating(rating));
-        }
+    if let Some(rating) = args.rating
+        && !(0.0..=10.0).contains(&rating)
+    {
+        return Err(crate::TanaError::InvalidRating(rating));
     }
 
     // Create book entry

@@ -91,7 +91,7 @@ pub fn execute(db: &Database, args: MoviesShowArgs) -> Result<()> {
     }
 
     if let Some(min_rating) = args.min_rating {
-        movies.retain(|m| m.rating.map_or(false, |r| r >= min_rating));
+        movies.retain(|m| m.rating.is_some_and(|r| r >= min_rating));
     }
 
     // Apply sorting

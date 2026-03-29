@@ -57,10 +57,10 @@ pub struct SeriesArgs {
 /// Add a TV series to the database
 pub fn execute(db: &Database, args: SeriesArgs) -> Result<()> {
     // Validate rating
-    if let Some(rating) = args.rating {
-        if rating < 0.0 || rating > 10.0 {
-            return Err(crate::TanaError::InvalidRating(rating));
-        }
+    if let Some(rating) = args.rating
+        && !(0.0..=10.0).contains(&rating)
+    {
+        return Err(crate::TanaError::InvalidRating(rating));
     }
 
     // Create series entry
@@ -71,10 +71,10 @@ pub fn execute(db: &Database, args: SeriesArgs) -> Result<()> {
     if let Some(seasons) = args.seasons {
         series = series.with_total_seasons(seasons);
     }
-    if let Some(current_season) = args.current_season {
-        if let Some(current_episode) = args.current_episode {
-            series = series.with_progress(current_season, current_episode);
-        }
+    if let Some(current_season) = args.current_season
+        && let Some(current_episode) = args.current_episode
+    {
+        series = series.with_progress(current_season, current_episode);
     }
     if let Some(rating) = args.rating {
         series = series.with_rating(rating);

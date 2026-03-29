@@ -41,10 +41,10 @@ pub struct MovieArgs {
 /// Add a movie to the database
 pub fn execute(db: &Database, args: MovieArgs) -> Result<()> {
     // Validate rating
-    if let Some(rating) = args.rating {
-        if rating < 0.0 || rating > 10.0 {
-            return Err(crate::TanaError::InvalidRating(rating));
-        }
+    if let Some(rating) = args.rating
+        && !(0.0..=10.0).contains(&rating)
+    {
+        return Err(crate::TanaError::InvalidRating(rating));
     }
 
     // Create movie entry

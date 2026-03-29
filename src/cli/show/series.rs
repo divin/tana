@@ -94,7 +94,7 @@ pub fn execute(db: &Database, args: SeriesShowArgs) -> Result<()> {
     }
 
     if let Some(min_rating) = args.min_rating {
-        series.retain(|s| s.rating.map_or(false, |r| r >= min_rating));
+        series.retain(|s| s.rating.is_some_and(|r| r >= min_rating));
     }
 
     // Apply sorting

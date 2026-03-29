@@ -43,10 +43,10 @@ pub struct MovieEditArgs {
 /// Edit a movie in the database
 pub fn execute(db: &Database, args: MovieEditArgs) -> Result<()> {
     // Validate rating if provided
-    if let Some(rating) = args.rating {
-        if rating < 0.0 || rating > 10.0 {
-            return Err(crate::TanaError::InvalidRating(rating));
-        }
+    if let Some(rating) = args.rating
+        && !(0.0..=10.0).contains(&rating)
+    {
+        return Err(crate::TanaError::InvalidRating(rating));
     }
 
     // Fetch existing movie
