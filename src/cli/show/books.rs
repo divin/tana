@@ -5,6 +5,12 @@
 //! various fields (title, author, genre, pages, rating, date) and output in multiple
 //! formats (plain text table, JSON, CSV).
 //!
+//! # Module Structure
+//!
+//! This module is organized as a hub with submodules:
+//! - `display`: Handles formatting and output of books in various formats
+//! - `sort`: Provides sorting and text utility functions
+//!
 //! # Examples
 //!
 //! Filter books by author and sort by rating in descending order:
@@ -21,15 +27,19 @@
 //! execute(&db, args)?;
 //! ```
 
+pub mod display;
+pub mod sort;
+
 use clap::Args;
-use serde::Serialize;
 
 use crate::cli::context::AppContext;
-use crate::db::models::Book;
 use crate::db::queries;
 use crate::error::Result;
 
 use super::format::Format;
+
+// Re-export BookEntry for convenience
+pub use display::BookEntry;
 
 /// Arguments for showing books with filtering, sorting, and formatting options
 ///
@@ -95,40 +105,6 @@ pub struct BooksShowArgs {
     pub format: String,
 }
 
-/// Book entry for JSON serialization
-///
-/// This struct is used when serializing books to JSON format.
-/// It includes all relevant book information except ISBN, which is
-/// available in the JSON output but not in the plain text display.
-#[derive(Serialize, Debug)]
-struct BookEntry {
-    id: i32,
-    title: String,
-    author: String,
-    genre: Option<String>,
-    pages: Option<i32>,
-    rating: Option<f64>,
-    completed_date: String,
-    isbn: Option<String>,
-    notes: Option<String>,
-}
-
-impl From<Book> for BookEntry {
-    fn from(book: Book) -> Self {
-        BookEntry {
-            id: book.id.unwrap_or(0),
-            title: book.title,
-            author: book.author,
-            genre: book.genre,
-            pages: book.pages,
-            rating: book.rating,
-            completed_date: book.completed_date,
-            isbn: book.isbn,
-            notes: book.notes,
-        }
-    }
-}
-
 /// Execute the show books command
 ///
 /// Retrieves all books from the database and applies filtering, sorting,
@@ -145,7 +121,7 @@ impl From<Book> for BookEntry {
 ///
 /// # Arguments
 ///
-/// * `db` - Database connection
+/// * `ctx` - Application context containing database connection
 /// * `args` - Command-line arguments specifying filters, sorting, and format
 ///
 /// # Returns
@@ -160,6 +136,9 @@ impl From<Book> for BookEntry {
 /// - Invalid format string is provided
 /// - JSON serialization fails
 pub fn execute(ctx: &AppContext, args: BooksShowArgs) -> Result<()> {
+    use self::display::{display_csv, display_json, display_plain};
+    use self::sort::sort_books;
+
     let conn = ctx.db().connection();
     let mut books = queries::books::get_all(conn, None)?;
 
@@ -210,244 +189,9 @@ pub fn execute(ctx: &AppContext, args: BooksShowArgs) -> Result<()> {
     Ok(())
 }
 
-/// Display books in plain text table format
-///
-/// Renders a formatted ASCII table showing key book information:
-/// - ID: Database identifier
-/// - Title: Book title (truncated if necessary)
-/// - Author: Author name (truncated if necessary)
-/// - Genre: Book genre (truncated if necessary)
-/// - Pages: Number of pages
-/// - Rating: User rating out of 10
-/// - Completed: Date the book was completed
-///
-/// If no books are found, displays a simple "No books found." message.
-///
-/// # Arguments
-///
-/// * `books` - Slice of books to display
-fn display_plain(books: &[Book], truncate_length: usize) {
-    if books.is_empty() {
-        println!("No books found.");
-        return;
-    }
-
-    println!("\n{:=^120}", " Books ");
-    println!(
-        "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12}",
-        "ID", "Title", "Author", "Genre", "Pages", "Rating", "Completed"
-    );
-    println!("{}", "=".repeat(120));
-
-    for book in books {
-        let title = truncate(&book.title, truncate_length.min(28));
-        let author = truncate(&book.author, truncate_length.min(18));
-        let genre = book
-            .genre
-            .as_ref()
-            .map(|g| truncate(g, truncate_length.min(13)))
-            .unwrap_or_else(|| "—".to_string());
-        let pages = book
-            .pages
-            .map(|p| p.to_string())
-            .unwrap_or_else(|| "—".to_string());
-        let rating = book
-            .rating
-            .map(|r| format!("{}/10", r))
-            .unwrap_or_else(|| "—".to_string());
-
-        println!(
-            "{:<4} {:<30} {:<20} {:<15} {:<7} {:<8} {:<12}",
-            book.id.unwrap_or(0),
-            title,
-            author,
-            genre,
-            pages,
-            rating,
-            book.completed_date
-        );
-    }
-    println!();
-}
-
-/// Display books in JSON format
-///
-/// Converts books to JSON format and prints them in a pretty-printed,
-/// human-readable layout. All book fields are included in the output.
-///
-/// # Arguments
-///
-/// * `books` - Slice of books to serialize and display
-///
-/// # Returns
-///
-/// Returns `Ok(())` if successful, or a JSON serialization error if it fails.
-///
-/// # Errors
-///
-/// Returns an error if JSON serialization fails.
-fn display_json(books: &[Book]) -> Result<()> {
-    let entries: Vec<BookEntry> = books.iter().map(|b| b.clone().into()).collect();
-    let json = serde_json::to_string_pretty(&entries)?;
-    println!("{}", json);
-    Ok(())
-}
-
-/// Display books in CSV format
-///
-/// Exports books as comma-separated values (CSV) suitable for import into
-/// spreadsheet applications. All fields are properly escaped according to CSV standards:
-/// fields containing commas, quotes, or newlines are wrapped in double quotes,
-/// and internal quotes are escaped by doubling.
-///
-/// The header row contains: ID, Title, Author, Genre, Pages, Rating, CompletedDate, ISBN, Notes
-///
-/// # Arguments
-///
-/// * `books` - Slice of books to export as CSV
-fn display_csv(books: &[Book], _truncate_length: usize) {
-    use super::format::escape_csv;
-
-    println!("ID,Title,Author,Genre,Pages,Rating,CompletedDate,ISBN,Notes");
-    for book in books {
-        let title = escape_csv(&book.title);
-        let author = escape_csv(&book.author);
-        let genre = book
-            .genre
-            .as_ref()
-            .map(|g| escape_csv(g))
-            .unwrap_or_default();
-        let pages = book.pages.map(|p| p.to_string()).unwrap_or_default();
-        let rating = book.rating.map(|r| r.to_string()).unwrap_or_default();
-        let isbn = book
-            .isbn
-            .as_ref()
-            .map(|i| escape_csv(i))
-            .unwrap_or_default();
-        let notes = book
-            .notes
-            .as_ref()
-            .map(|n| escape_csv(n))
-            .unwrap_or_default();
-
-        println!(
-            "{},{},{},{},{},{},{},{},{}",
-            book.id.unwrap_or(0),
-            title,
-            author,
-            genre,
-            pages,
-            rating,
-            escape_csv(&book.completed_date),
-            isbn,
-            notes
-        );
-    }
-}
-
-/// Sort books by specified field and order
-///
-/// Sorts the books slice in-place according to the specified field and order.
-/// If an unrecognized sort field is provided, the list remains unsorted.
-///
-/// Supported sort fields:
-/// - "title": Sort alphabetically by book title
-/// - "author": Sort alphabetically by author name
-/// - "genre": Sort alphabetically by genre (unrated books sort first)
-/// - "pages": Sort numerically by page count (books without page count sort first)
-/// - "rating": Sort numerically by rating (books without rating are treated as 0)
-/// - "date": Sort by completion date
-///
-/// # Arguments
-///
-/// * `books` - Mutable slice of books to sort
-/// * `sort_by` - Field name to sort by (case-insensitive)
-/// * `order` - Sort order: "asc" for ascending, "desc" for descending
-fn sort_books(books: &mut [Book], sort_by: &str, order: &str) {
-    match sort_by.to_lowercase().as_str() {
-        "title" => books.sort_by(|a, b| a.title.cmp(&b.title)),
-        "author" => books.sort_by(|a, b| a.author.cmp(&b.author)),
-        "genre" => books.sort_by(|a, b| {
-            let a_genre = a.genre.as_deref().unwrap_or("");
-            let b_genre = b.genre.as_deref().unwrap_or("");
-            a_genre.cmp(b_genre)
-        }),
-        "pages" => books.sort_by(|a, b| {
-            let a_pages = a.pages.unwrap_or(0);
-            let b_pages = b.pages.unwrap_or(0);
-            a_pages.cmp(&b_pages)
-        }),
-        "rating" => books.sort_by(|a, b| {
-            let a_rating = a.rating.unwrap_or(0.0);
-            let b_rating = b.rating.unwrap_or(0.0);
-            a_rating
-                .partial_cmp(&b_rating)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }),
-        "date" => books.sort_by(|a, b| a.completed_date.cmp(&b.completed_date)),
-        _ => {} // No sorting for unrecognized fields
-    }
-
-    if order.to_lowercase() == "desc" {
-        books.reverse();
-    }
-}
-
-/// Truncate string to specified length with ellipsis
-///
-/// If the string exceeds the maximum length, it will be truncated to
-/// (max_len - 1) characters and an ellipsis character ("…") will be appended.
-/// If the string is within the limit, it is returned unchanged.
-///
-/// # Arguments
-///
-/// * `s` - The string to truncate
-/// * `max_len` - The maximum total length including the ellipsis
-///
-/// # Examples
-///
-/// ```ignore
-/// assert_eq!(truncate("Hello World", 5), "Hell…");
-/// assert_eq!(truncate("Hi", 5), "Hi");
-/// assert_eq!(truncate("Hello", 5), "Hello");
-/// ```
-fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() > max_len {
-        format!("{}…", &s[..max_len - 1])
-    } else {
-        s.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Tests for truncate function
-    #[test]
-    fn test_truncate_long_string() {
-        assert_eq!(truncate("Hello World", 5), "Hell…");
-    }
-
-    #[test]
-    fn test_truncate_exact_length() {
-        assert_eq!(truncate("Hello", 5), "Hello");
-    }
-
-    #[test]
-    fn test_truncate_short_string() {
-        assert_eq!(truncate("Hi", 5), "Hi");
-    }
-
-    #[test]
-    fn test_truncate_empty_string() {
-        assert_eq!(truncate("", 5), "");
-    }
-
-    #[test]
-    fn test_truncate_one_character() {
-        assert_eq!(truncate("A", 1), "A");
-    }
 
     // Tests for BooksShowArgs
     #[test]
@@ -522,80 +266,5 @@ mod tests {
 
         assert_eq!(args.min_rating, Some(8.5));
         assert_eq!(args.format, "csv");
-    }
-
-    // Tests for BookEntry conversion
-    #[test]
-    fn test_book_entry_conversion_full() {
-        let book = Book {
-            id: Some(42),
-            title: "The Hobbit".to_string(),
-            author: "J.R.R. Tolkien".to_string(),
-            isbn: Some("978-0547928227".to_string()),
-            genre: Some("Fantasy".to_string()),
-            pages: Some(310),
-            rating: Some(9.2),
-            started_date: Some("2024-01-01".to_string()),
-            completed_date: "2024-03-15".to_string(),
-            notes: Some("An excellent adventure".to_string()),
-            cover_path: None,
-        };
-
-        let entry: BookEntry = book.into();
-        assert_eq!(entry.id, 42);
-        assert_eq!(entry.title, "The Hobbit");
-        assert_eq!(entry.author, "J.R.R. Tolkien");
-        assert_eq!(entry.genre, Some("Fantasy".to_string()));
-        assert_eq!(entry.pages, Some(310));
-        assert_eq!(entry.rating, Some(9.2));
-        assert_eq!(entry.completed_date, "2024-03-15");
-        assert_eq!(entry.isbn, Some("978-0547928227".to_string()));
-        assert_eq!(entry.notes, Some("An excellent adventure".to_string()));
-    }
-
-    #[test]
-    fn test_book_entry_conversion_minimal() {
-        let book = Book {
-            id: Some(1),
-            title: "Test Book".to_string(),
-            author: "Test Author".to_string(),
-            isbn: None,
-            genre: None,
-            pages: None,
-            rating: None,
-            started_date: None,
-            completed_date: "2024-01-01".to_string(),
-            notes: None,
-            cover_path: None,
-        };
-
-        let entry: BookEntry = book.into();
-        assert_eq!(entry.id, 1);
-        assert_eq!(entry.title, "Test Book");
-        assert_eq!(entry.author, "Test Author");
-        assert!(entry.genre.is_none());
-        assert!(entry.pages.is_none());
-        assert!(entry.rating.is_none());
-        assert!(entry.notes.is_none());
-    }
-
-    #[test]
-    fn test_book_entry_zero_id() {
-        let book = Book {
-            id: None,
-            title: "Test Book".to_string(),
-            author: "Test Author".to_string(),
-            isbn: None,
-            genre: None,
-            pages: None,
-            rating: None,
-            started_date: None,
-            completed_date: "2024-05-01".to_string(),
-            notes: None,
-            cover_path: None,
-        };
-
-        let entry: BookEntry = book.into();
-        assert_eq!(entry.id, 0);
     }
 }
