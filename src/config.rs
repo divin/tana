@@ -104,6 +104,24 @@ pub struct DefaultsConfig {
     pub default_year: Option<i32>,
 }
 
+/// Image configuration section
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageConfig {
+    /// Default directory to store image files
+    pub default_directory: Option<String>,
+    /// Whether to auto-copy images to default directory
+    pub auto_copy: Option<bool>,
+}
+
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            default_directory: None,
+            auto_copy: Some(false),
+        }
+    }
+}
+
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -119,6 +137,9 @@ pub struct Config {
     /// Default values for add commands
     #[serde(default)]
     pub defaults: DefaultsConfig,
+    /// Image configuration
+    #[serde(default)]
+    pub images: ImageConfig,
 }
 
 impl Config {
@@ -193,6 +214,20 @@ impl Config {
     pub fn default_year(&self) -> Option<i32> {
         self.defaults.default_year
     }
+
+    /// Get the images default directory, preferring config value over default
+    pub fn images_default_directory(&self) -> PathBuf {
+        if let Some(path) = &self.images.default_directory {
+            expand_home(path)
+        } else {
+            get_default_images_directory()
+        }
+    }
+
+    /// Check if auto-copy for images is enabled
+    pub fn images_auto_copy(&self) -> bool {
+        self.images.auto_copy.unwrap_or(false)
+    }
 }
 
 /// Expand home directory in path (~/)
@@ -241,6 +276,19 @@ fn get_default_db_path() -> PathBuf {
     };
 
     data_dir.join("tana").join("tana.db")
+}
+
+/// Get the default images directory: ~/.local/share/tana/images
+fn get_default_images_directory() -> PathBuf {
+    let data_dir = if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
+        PathBuf::from(xdg_data)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".local/share")
+    } else {
+        PathBuf::from(".local/share")
+    };
+
+    data_dir.join("tana").join("images")
 }
 
 /// Apply defaults to optional config fields
@@ -356,6 +404,10 @@ format = "csv"
                 default_rating: Some(8.0),
                 default_year: Some(2025),
             },
+            images: ImageConfig {
+                default_directory: Some("~/.local/share/tana/images".to_string()),
+                auto_copy: Some(false),
+            },
         };
 
         assert_eq!(config.format(), Format::Json);
@@ -392,5 +444,94 @@ format = "csv"
     fn test_default_db_path() {
         let path = get_default_db_path();
         assert!(path.to_string_lossy().contains("tana/tana.db"));
+    }
+
+    #[test]
+    fn test_default_images_directory() {
+        let path = get_default_images_directory();
+        assert!(path.to_string_lossy().contains("tana/images"));
+    }
+
+    #[test]
+    fn test_image_config_default() {
+        let config = Config::default();
+        assert_eq!(config.images_auto_copy(), false);
+        assert!(
+            config
+                .images_default_directory()
+                .to_string_lossy()
+                .contains("tana/images")
+        );
+    }
+
+    #[test]
+    fn test_image_config_from_toml() {
+        let toml_content = r#"
+[images]
+default_directory = "~/Pictures/tana"
+auto_copy = true
+"#;
+
+        let config: Config = toml::from_str(toml_content).unwrap();
+
+        assert_eq!(config.images_auto_copy(), true);
+        assert!(
+            config
+                .images_default_directory()
+                .to_string_lossy()
+                .contains("Pictures/tana")
+        );
+    }
+
+    #[test]
+    fn test_image_config_partial() {
+        let toml_content = r#"
+[images]
+auto_copy = true
+"#;
+
+        let config: Config = toml::from_str(toml_content).unwrap();
+
+        assert_eq!(config.images_auto_copy(), true);
+        assert!(
+            config
+                .images_default_directory()
+                .to_string_lossy()
+                .contains("tana/images")
+        );
+    }
+
+    #[test]
+    fn test_config_with_all_sections() {
+        let toml_content = r#"
+[database]
+path = "~/.local/share/tana/custom.db"
+
+[display]
+format = "json"
+debug = true
+
+[formatting]
+truncate_length = 100
+
+[defaults]
+default_rating = 8.0
+
+[images]
+default_directory = "~/custom_images"
+auto_copy = true
+"#;
+
+        let config: Config = toml::from_str(toml_content).unwrap();
+
+        assert_eq!(config.format(), Format::Json);
+        assert_eq!(config.debug(), true);
+        assert_eq!(config.images_auto_copy(), true);
+        assert!(
+            config
+                .images_default_directory()
+                .to_string_lossy()
+                .contains("custom_images")
+        );
     }
 }

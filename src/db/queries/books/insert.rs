@@ -13,8 +13,8 @@ pub fn insert(conn: &Connection, book: &Book) -> Result<i32> {
 
     let mut stmt = conn.prepare(
         "INSERT INTO books (title, author, isbn, genre, pages, rating, started_date,
-         completed_date, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         completed_date, notes, cover_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )?;
 
     let id = stmt.insert(params![
@@ -27,6 +27,7 @@ pub fn insert(conn: &Connection, book: &Book) -> Result<i32> {
         &book.started_date,
         &book.completed_date,
         &book.notes,
+        &book.cover_path,
     ])?;
 
     Ok(id as i32)
@@ -40,7 +41,7 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
         conn.execute_batch(
-            "CREATE TABLE books (
+            "CREATE TABLE IF NOT EXISTS books (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 author TEXT NOT NULL,
@@ -51,6 +52,7 @@ mod tests {
                 started_date DATE,
                 completed_date DATE NOT NULL,
                 notes TEXT,
+                cover_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -72,5 +74,27 @@ mod tests {
 
         let id = insert(&conn, &book).unwrap();
         assert!(id > 0);
+    }
+
+    #[test]
+    fn test_insert_book_with_cover_path() {
+        let conn = setup_test_db();
+        let book = Book::new(
+            "The Rust Book".to_string(),
+            "Steve Klabnik".to_string(),
+            "2024-01-25".to_string(),
+        )
+        .with_pages(500)
+        .with_cover_path("/images/covers/rust_book.jpg".to_string());
+
+        let id = insert(&conn, &book).unwrap();
+        assert!(id > 0);
+
+        // Verify the cover_path was inserted
+        let mut stmt = conn
+            .prepare("SELECT cover_path FROM books WHERE id = ?")
+            .unwrap();
+        let cover_path: Option<String> = stmt.query_row([id], |row| row.get(0)).unwrap();
+        assert_eq!(cover_path, Some("/images/covers/rust_book.jpg".to_string()));
     }
 }

@@ -14,13 +14,13 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<TVSeries>> {
     let query = if let Some(l) = limit {
         format!(
             "SELECT id, title, release_year, status, total_seasons, current_season,
-             current_episode, rating, started_date, completed_date, notes
+             current_episode, rating, started_date, completed_date, notes, poster_path
              FROM tv_series ORDER BY started_date DESC LIMIT {}",
             l
         )
     } else {
         "SELECT id, title, release_year, status, total_seasons, current_season,
-         current_episode, rating, started_date, completed_date, notes
+         current_episode, rating, started_date, completed_date, notes, poster_path
          FROM tv_series ORDER BY started_date DESC"
             .to_string()
     };
@@ -40,6 +40,7 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<TVSeries>> {
                 started_date: row.get(8)?,
                 completed_date: row.get(9)?,
                 notes: row.get(10)?,
+                poster_path: row.get(11)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -53,7 +54,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<TVSeries>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, title, release_year, status, total_seasons, current_season,
-         current_episode, rating, started_date, completed_date, notes
+         current_episode, rating, started_date, completed_date, notes, poster_path
          FROM tv_series WHERE id = ?",
     )?;
 
@@ -71,6 +72,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<TVSeries>> {
                 started_date: row.get(8)?,
                 completed_date: row.get(9)?,
                 notes: row.get(10)?,
+                poster_path: row.get(11)?,
             })
         })
         .optional()?;
@@ -84,7 +86,7 @@ pub fn get_by_status(conn: &Connection, status: &str) -> Result<Vec<TVSeries>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, title, release_year, status, total_seasons, current_season,
-         current_episode, rating, started_date, completed_date, notes
+         current_episode, rating, started_date, completed_date, notes, poster_path
          FROM tv_series WHERE status = ? ORDER BY started_date DESC",
     )?;
 
@@ -102,6 +104,7 @@ pub fn get_by_status(conn: &Connection, status: &str) -> Result<Vec<TVSeries>> {
                 started_date: row.get(8)?,
                 completed_date: row.get(9)?,
                 notes: row.get(10)?,
+                poster_path: row.get(11)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -117,7 +120,7 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
         conn.execute_batch(
-            "CREATE TABLE tv_series (
+            "CREATE TABLE IF NOT EXISTS tv_series (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 release_year INTEGER,
@@ -129,6 +132,7 @@ mod tests {
                 started_date DATE NOT NULL,
                 completed_date DATE,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -151,8 +155,8 @@ mod tests {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
-             current_episode, rating, started_date, completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         let id = stmt
@@ -166,7 +170,8 @@ mod tests {
                 &series.rating,
                 &series.started_date,
                 &series.completed_date,
-                &series.notes
+                &series.notes,
+                &series.poster_path,
             ])
             .unwrap();
 
@@ -192,8 +197,8 @@ mod tests {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
-             current_episode, rating, started_date, completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -206,15 +211,16 @@ mod tests {
             &series1.rating,
             &series1.started_date,
             &series1.completed_date,
-            &series1.notes
+            &series1.notes,
+            &series1.poster_path,
         ])
         .unwrap();
 
         let mut stmt = conn
             .prepare(
                 "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
-             current_episode, rating, started_date, completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -227,12 +233,57 @@ mod tests {
             &series2.rating,
             &series2.started_date,
             &series2.completed_date,
-            &series2.notes
+            &series2.notes,
+            &series2.poster_path,
         ])
         .unwrap();
 
         let series = get_by_status(&conn, "completed").unwrap();
         assert_eq!(series.len(), 1);
         assert_eq!(series[0].title, "Series 2");
+    }
+
+    #[test]
+    fn test_get_series_with_poster_path() {
+        let conn = setup_test_db();
+        let series = TVSeries::new(
+            "Breaking Bad".to_string(),
+            "2024-01-10".to_string(),
+            "completed".to_string(),
+        )
+        .with_total_seasons(5)
+        .with_poster_path("/images/posters/breaking_bad.jpg".to_string());
+
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap();
+        let id = stmt
+            .insert(rusqlite::params![
+                &series.title,
+                &series.release_year,
+                &series.status,
+                &series.total_seasons,
+                &series.current_season,
+                &series.current_episode,
+                &series.rating,
+                &series.started_date,
+                &series.completed_date,
+                &series.notes,
+                &series.poster_path,
+            ])
+            .unwrap();
+
+        let retrieved = get_by_id(&conn, id as i32).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.title, "Breaking Bad");
+        assert_eq!(
+            retrieved.poster_path,
+            Some("/images/posters/breaking_bad.jpg".to_string())
+        );
     }
 }

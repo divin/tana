@@ -15,6 +15,7 @@ pub struct Movie {
     pub rating: Option<f64>,
     pub watched_date: String,
     pub notes: Option<String>,
+    pub poster_path: Option<String>,
 }
 
 impl Movie {
@@ -28,6 +29,7 @@ impl Movie {
             rating: None,
             watched_date,
             notes: None,
+            poster_path: None,
         }
     }
 
@@ -52,6 +54,12 @@ impl Movie {
     /// Add notes
     pub fn with_notes(mut self, notes: String) -> Self {
         self.notes = Some(notes);
+        self
+    }
+
+    /// Add a poster path
+    pub fn with_poster_path(mut self, poster_path: String) -> Self {
+        self.poster_path = Some(poster_path);
         self
     }
 }
@@ -107,5 +115,26 @@ mod tests {
         assert_eq!(Movie::media_type_name(), "movie");
         assert_eq!(movie.title(), "Dune");
         assert_eq!(movie.date_added(), "2024-01-20");
+    }
+
+    #[test]
+    fn test_movie_with_poster_path() {
+        let movie = Movie::new("Inception".to_string(), "2024-01-15".to_string())
+            .with_year(2010)
+            .with_director("Christopher Nolan".to_string())
+            .with_poster_path("/images/posters/inception.jpg".to_string());
+
+        assert_eq!(movie.title, "Inception");
+        assert_eq!(
+            movie.poster_path,
+            Some("/images/posters/inception.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_movie_without_poster_path() {
+        let movie = Movie::new("Dune".to_string(), "2024-01-20".to_string());
+
+        assert_eq!(movie.poster_path, None);
     }
 }

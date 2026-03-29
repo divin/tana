@@ -13,8 +13,8 @@ pub fn insert(conn: &Connection, series: &TVSeries) -> Result<i32> {
 
     let mut stmt = conn.prepare(
         "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
-         current_episode, rating, started_date, completed_date, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         current_episode, rating, started_date, completed_date, notes, poster_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )?;
 
     let id = stmt.insert(params![
@@ -28,6 +28,7 @@ pub fn insert(conn: &Connection, series: &TVSeries) -> Result<i32> {
         &series.started_date,
         &series.completed_date,
         &series.notes,
+        &series.poster_path,
     ])?;
 
     Ok(id as i32)
@@ -53,6 +54,7 @@ mod tests {
                 started_date DATE NOT NULL,
                 completed_date DATE,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -74,5 +76,30 @@ mod tests {
 
         let id = insert(&conn, &series).unwrap();
         assert!(id > 0);
+    }
+
+    #[test]
+    fn test_insert_series_with_poster_path() {
+        let conn = setup_test_db();
+        let series = TVSeries::new(
+            "Breaking Bad".to_string(),
+            "2024-01-10".to_string(),
+            "completed".to_string(),
+        )
+        .with_total_seasons(5)
+        .with_poster_path("/images/posters/breaking_bad.jpg".to_string());
+
+        let id = insert(&conn, &series).unwrap();
+        assert!(id > 0);
+
+        // Verify the poster_path was inserted
+        let mut stmt = conn
+            .prepare("SELECT poster_path FROM tv_series WHERE id = ?")
+            .unwrap();
+        let poster_path: Option<String> = stmt.query_row([id], |row| row.get(0)).unwrap();
+        assert_eq!(
+            poster_path,
+            Some("/images/posters/breaking_bad.jpg".to_string())
+        );
     }
 }

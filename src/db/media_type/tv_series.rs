@@ -19,6 +19,7 @@ pub struct TVSeries {
     pub started_date: String,
     pub completed_date: Option<String>,
     pub notes: Option<String>,
+    pub poster_path: Option<String>,
 }
 
 impl TVSeries {
@@ -36,6 +37,7 @@ impl TVSeries {
             started_date,
             completed_date: None,
             notes: None,
+            poster_path: None,
         }
     }
 
@@ -73,6 +75,12 @@ impl TVSeries {
     /// Add notes
     pub fn with_notes(mut self, notes: String) -> Self {
         self.notes = Some(notes);
+        self
+    }
+
+    /// Add a poster path
+    pub fn with_poster_path(mut self, path: String) -> Self {
+        self.poster_path = Some(path);
         self
     }
 }
@@ -120,5 +128,35 @@ mod tests {
         assert_eq!(series.title, "Breaking Bad");
         assert_eq!(series.total_seasons, Some(5));
         assert_eq!(series.rating, Some(9.5));
+    }
+
+    #[test]
+    fn test_tvseries_with_poster_path() {
+        let series = TVSeries::new(
+            "Breaking Bad".to_string(),
+            "2024-01-10".to_string(),
+            "completed".to_string(),
+        )
+        .with_total_seasons(5)
+        .with_rating(9.5)
+        .with_poster_path("/images/posters/breaking_bad.jpg".to_string());
+
+        assert_eq!(series.title, "Breaking Bad");
+        assert_eq!(
+            series.poster_path,
+            Some("/images/posters/breaking_bad.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tvseries_poster_path_optional() {
+        let series = TVSeries::new(
+            "Breaking Bad".to_string(),
+            "2024-01-10".to_string(),
+            "completed".to_string(),
+        )
+        .with_total_seasons(5);
+
+        assert_eq!(series.poster_path, None);
     }
 }

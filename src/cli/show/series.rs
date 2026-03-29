@@ -349,6 +349,7 @@ mod tests {
             started_date: "2024-01-01".to_string(),
             completed_date: Some("2024-12-31".to_string()),
             notes: Some("Great show!".to_string()),
+            poster_path: None,
         };
 
         let entry: SeriesEntry = series.into();

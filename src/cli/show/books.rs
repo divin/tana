@@ -538,6 +538,7 @@ mod tests {
             started_date: Some("2024-01-01".to_string()),
             completed_date: "2024-03-15".to_string(),
             notes: Some("An excellent adventure".to_string()),
+            cover_path: None,
         };
 
         let entry: BookEntry = book.into();
@@ -565,6 +566,7 @@ mod tests {
             started_date: None,
             completed_date: "2024-01-01".to_string(),
             notes: None,
+            cover_path: None,
         };
 
         let entry: BookEntry = book.into();
@@ -581,15 +583,16 @@ mod tests {
     fn test_book_entry_zero_id() {
         let book = Book {
             id: None,
-            title: "No ID Book".to_string(),
-            author: "Author".to_string(),
+            title: "Test Book".to_string(),
+            author: "Test Author".to_string(),
             isbn: None,
             genre: None,
             pages: None,
             rating: None,
             started_date: None,
-            completed_date: "2024-01-01".to_string(),
+            completed_date: "2024-05-01".to_string(),
             notes: None,
+            cover_path: None,
         };
 
         let entry: BookEntry = book.into();

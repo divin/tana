@@ -119,7 +119,8 @@ mod tests {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS movies (
                 id INTEGER PRIMARY KEY,
-                title TEXT NOT NULL
+                title TEXT NOT NULL,
+                poster_path TEXT
             )",
             [],
         )
@@ -128,7 +129,8 @@ mod tests {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS tv_series (
                 id INTEGER PRIMARY KEY,
-                title TEXT NOT NULL
+                title TEXT NOT NULL,
+                poster_path TEXT
             )",
             [],
         )
@@ -137,7 +139,8 @@ mod tests {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS books (
                 id INTEGER PRIMARY KEY,
-                title TEXT NOT NULL
+                title TEXT NOT NULL,
+                cover_path TEXT
             )",
             [],
         )

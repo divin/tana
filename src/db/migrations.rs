@@ -27,11 +27,18 @@ impl Migration {
 /// Add new migrations to the list as you add new schema changes.
 /// Each migration must have a unique version number.
 fn get_migrations() -> Vec<Migration> {
-    vec![Migration::new(
-        1,
-        "initial_schema",
-        include_str!("../../migrations/001_initial_schema.sql"),
-    )]
+    vec![
+        Migration::new(
+            1,
+            "initial_schema",
+            include_str!("../../migrations/001_initial_schema.sql"),
+        ),
+        Migration::new(
+            2,
+            "add_poster_paths",
+            include_str!("../../migrations/002_add_poster_paths.sql"),
+        ),
+    ]
 }
 
 /// Run all pending migrations on the database
@@ -146,5 +153,61 @@ mod tests {
             .unwrap_or(0);
 
         assert!(version > 0, "Version should be greater than 0");
+    }
+
+    #[test]
+    fn test_add_poster_paths_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).expect("Migration run failed");
+
+        // Verify poster_path column exists in movies table
+        let has_movies_poster: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('movies') WHERE name='poster_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        assert!(
+            has_movies_poster,
+            "poster_path column should exist in movies table"
+        );
+
+        // Verify poster_path column exists in tv_series table
+        let has_tv_poster: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('tv_series') WHERE name='poster_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        assert!(
+            has_tv_poster,
+            "poster_path column should exist in tv_series table"
+        );
+
+        // Verify cover_path column exists in books table
+        let has_books_cover: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('books') WHERE name='cover_path'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        assert!(
+            has_books_cover,
+            "cover_path column should exist in books table"
+        );
+
+        // Verify that migration 2 was recorded
+        let version: u32 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        assert_eq!(version, 2, "Schema version should be 2 after migrations");
     }
 }

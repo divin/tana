@@ -12,7 +12,7 @@ pub fn update(conn: &Connection, id: i32, series: &TVSeries) -> Result<()> {
     debug!("Updating TV series with id: {}", id);
 
     let mut stmt = conn.prepare(
-        "UPDATE tv_series SET title = ?, release_year = ?, status = ?, total_seasons = ?, current_season = ?, current_episode = ?, rating = ?, started_date = ?, completed_date = ?, notes = ? WHERE id = ?",
+        "UPDATE tv_series SET title = ?, release_year = ?, status = ?, total_seasons = ?, current_season = ?, current_episode = ?, rating = ?, started_date = ?, completed_date = ?, notes = ?, poster_path = ? WHERE id = ?",
     )?;
 
     stmt.execute(params![
@@ -26,6 +26,7 @@ pub fn update(conn: &Connection, id: i32, series: &TVSeries) -> Result<()> {
         &series.started_date,
         &series.completed_date,
         &series.notes,
+        &series.poster_path,
         id,
     ])?;
 
@@ -40,7 +41,7 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
         conn.execute_batch(
-            "CREATE TABLE tv_series (
+            "CREATE TABLE IF NOT EXISTS tv_series (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 release_year INTEGER,
@@ -52,6 +53,7 @@ mod tests {
                 started_date DATE NOT NULL,
                 completed_date DATE,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -76,8 +78,8 @@ mod tests {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
-             current_episode, rating, started_date, completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         let id = stmt
@@ -91,7 +93,8 @@ mod tests {
                 &series.rating,
                 &series.started_date,
                 &series.completed_date,
-                &series.notes
+                &series.notes,
+                &series.poster_path
             ])
             .unwrap();
 
@@ -110,5 +113,56 @@ mod tests {
 
         assert_eq!(updated_status, "completed");
         assert_eq!(updated_rating, 9.5);
+    }
+
+    #[test]
+    fn test_update_series_poster_path() {
+        let conn = setup_test_db();
+        let mut series = TVSeries::new(
+            "Breaking Bad".to_string(),
+            "2024-01-10".to_string(),
+            "ongoing".to_string(),
+        )
+        .with_total_seasons(5)
+        .with_rating(8.5);
+
+        // Insert
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO tv_series (title, release_year, status, total_seasons, current_season,
+             current_episode, rating, started_date, completed_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap();
+        let id = stmt
+            .insert(rusqlite::params![
+                &series.title,
+                &series.release_year,
+                &series.status,
+                &series.total_seasons,
+                &series.current_season,
+                &series.current_episode,
+                &series.rating,
+                &series.started_date,
+                &series.completed_date,
+                &series.notes,
+                &series.poster_path,
+            ])
+            .unwrap();
+
+        // Update with poster path
+        series.poster_path = Some("/images/posters/breaking_bad.jpg".to_string());
+        update(&conn, id as i32, &series).unwrap();
+
+        // Verify
+        let mut stmt = conn
+            .prepare("SELECT poster_path FROM tv_series WHERE id = ?")
+            .unwrap();
+        let updated_poster_path: Option<String> = stmt.query_row([id], |row| row.get(0)).unwrap();
+
+        assert_eq!(
+            updated_poster_path,
+            Some("/images/posters/breaking_bad.jpg".to_string())
+        );
     }
 }

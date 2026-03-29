@@ -12,7 +12,7 @@ pub fn update(conn: &Connection, id: i32, movie: &Movie) -> Result<()> {
     debug!("Updating movie with id: {}", id);
 
     let mut stmt = conn.prepare(
-        "UPDATE movies SET title = ?, release_year = ?, director = ?, rating = ?, watched_date = ?, notes = ? WHERE id = ?",
+        "UPDATE movies SET title = ?, release_year = ?, director = ?, rating = ?, watched_date = ?, notes = ?, poster_path = ? WHERE id = ?",
     )?;
 
     stmt.execute(params![
@@ -22,6 +22,7 @@ pub fn update(conn: &Connection, id: i32, movie: &Movie) -> Result<()> {
         &movie.rating,
         &movie.watched_date,
         &movie.notes,
+        &movie.poster_path,
         id,
     ])?;
 
@@ -44,6 +45,7 @@ mod tests {
                 rating REAL,
                 watched_date DATE NOT NULL,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -64,8 +66,8 @@ mod tests {
         // Insert
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         let id = stmt
@@ -75,7 +77,8 @@ mod tests {
                 &movie.director,
                 &movie.rating,
                 &movie.watched_date,
-                &movie.notes
+                &movie.notes,
+                &movie.poster_path,
             ])
             .unwrap();
 
@@ -94,5 +97,48 @@ mod tests {
 
         assert_eq!(updated_rating, 9.5);
         assert_eq!(updated_notes, Some("Updated rating".to_string()));
+    }
+
+    #[test]
+    fn test_update_movie_poster_path() {
+        let conn = setup_test_db();
+        let mut movie = Movie::new("Inception".to_string(), "2024-01-15".to_string())
+            .with_year(2010)
+            .with_director("Christopher Nolan".to_string())
+            .with_rating(9.0);
+
+        // Insert
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap();
+        let id = stmt
+            .insert(rusqlite::params![
+                &movie.title,
+                &movie.release_year,
+                &movie.director,
+                &movie.rating,
+                &movie.watched_date,
+                &movie.notes,
+                &movie.poster_path,
+            ])
+            .unwrap();
+
+        // Update with poster path
+        movie.poster_path = Some("/images/posters/inception.jpg".to_string());
+        update(&conn, id as i32, &movie).unwrap();
+
+        // Verify
+        let mut stmt = conn
+            .prepare("SELECT poster_path FROM movies WHERE id = ?")
+            .unwrap();
+        let updated_poster_path: Option<String> = stmt.query_row([id], |row| row.get(0)).unwrap();
+
+        assert_eq!(
+            updated_poster_path,
+            Some("/images/posters/inception.jpg".to_string())
+        );
     }
 }

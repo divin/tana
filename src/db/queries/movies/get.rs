@@ -13,12 +13,12 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<Movie>> {
 
     let query = if let Some(l) = limit {
         format!(
-            "SELECT id, title, release_year, director, rating, watched_date, notes
+            "SELECT id, title, release_year, director, rating, watched_date, notes, poster_path
              FROM movies ORDER BY watched_date DESC LIMIT {}",
             l
         )
     } else {
-        "SELECT id, title, release_year, director, rating, watched_date, notes
+        "SELECT id, title, release_year, director, rating, watched_date, notes, poster_path
          FROM movies ORDER BY watched_date DESC"
             .to_string()
     };
@@ -34,6 +34,7 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<Movie>> {
                 rating: row.get(4)?,
                 watched_date: row.get(5)?,
                 notes: row.get(6)?,
+                poster_path: row.get(7)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -46,7 +47,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<Movie>> {
     debug!("Fetching movie with id: {}", id);
 
     let mut stmt = conn.prepare(
-        "SELECT id, title, release_year, director, rating, watched_date, notes
+        "SELECT id, title, release_year, director, rating, watched_date, notes, poster_path
          FROM movies WHERE id = ?",
     )?;
 
@@ -60,6 +61,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<Movie>> {
                 rating: row.get(4)?,
                 watched_date: row.get(5)?,
                 notes: row.get(6)?,
+                poster_path: row.get(7)?,
             })
         })
         .optional()?;
@@ -72,7 +74,7 @@ pub fn get_by_year(conn: &Connection, year: i32) -> Result<Vec<Movie>> {
     debug!("Fetching movies from year: {}", year);
 
     let mut stmt = conn.prepare(
-        "SELECT id, title, release_year, director, rating, watched_date, notes
+        "SELECT id, title, release_year, director, rating, watched_date, notes, poster_path
          FROM movies WHERE release_year = ? ORDER BY watched_date DESC",
     )?;
 
@@ -86,6 +88,7 @@ pub fn get_by_year(conn: &Connection, year: i32) -> Result<Vec<Movie>> {
                 rating: row.get(4)?,
                 watched_date: row.get(5)?,
                 notes: row.get(6)?,
+                poster_path: row.get(7)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -101,7 +104,7 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
         conn.execute_batch(
-            "CREATE TABLE movies (
+            "CREATE TABLE IF NOT EXISTS movies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 release_year INTEGER,
@@ -109,6 +112,7 @@ mod tests {
                 rating REAL,
                 watched_date DATE NOT NULL,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -126,8 +130,8 @@ mod tests {
 
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -136,14 +140,15 @@ mod tests {
             &movie1.director,
             &movie1.rating,
             &movie1.watched_date,
-            &movie1.notes
+            &movie1.notes,
+            &movie1.poster_path,
         ])
         .unwrap();
 
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -152,7 +157,8 @@ mod tests {
             &movie2.director,
             &movie2.rating,
             &movie2.watched_date,
-            &movie2.notes
+            &movie2.notes,
+            &movie2.poster_path,
         ])
         .unwrap();
 
@@ -169,8 +175,8 @@ mod tests {
 
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         let id = stmt
@@ -180,7 +186,8 @@ mod tests {
                 &movie.director,
                 &movie.rating,
                 &movie.watched_date,
-                &movie.notes
+                &movie.notes,
+                &movie.poster_path,
             ])
             .unwrap();
 
@@ -191,6 +198,42 @@ mod tests {
     }
 
     #[test]
+    fn test_get_movie_with_poster_path() {
+        let conn = setup_test_db();
+        let movie = Movie::new("Inception".to_string(), "2024-01-15".to_string())
+            .with_year(2010)
+            .with_director("Christopher Nolan".to_string())
+            .with_poster_path("/images/posters/inception.jpg".to_string());
+
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap();
+        let id = stmt
+            .insert(rusqlite::params![
+                &movie.title,
+                &movie.release_year,
+                &movie.director,
+                &movie.rating,
+                &movie.watched_date,
+                &movie.notes,
+                &movie.poster_path,
+            ])
+            .unwrap();
+
+        let retrieved = get_by_id(&conn, id as i32).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.title, "Inception");
+        assert_eq!(
+            retrieved.poster_path,
+            Some("/images/posters/inception.jpg".to_string())
+        );
+    }
+
+    #[test]
     fn test_get_movies_by_year() {
         let conn = setup_test_db();
         let movie1 = Movie::new("Movie 2010".to_string(), "2024-01-15".to_string()).with_year(2010);
@@ -198,8 +241,8 @@ mod tests {
 
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -208,14 +251,15 @@ mod tests {
             &movie1.director,
             &movie1.rating,
             &movie1.watched_date,
-            &movie1.notes
+            &movie1.notes,
+            &movie1.poster_path,
         ])
         .unwrap();
 
         let mut stmt = conn
             .prepare(
-                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -224,7 +268,8 @@ mod tests {
             &movie2.director,
             &movie2.rating,
             &movie2.watched_date,
-            &movie2.notes
+            &movie2.notes,
+            &movie2.poster_path,
         ])
         .unwrap();
 

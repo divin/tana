@@ -36,6 +36,7 @@ mod tests {
                 started_date DATE,
                 completed_date DATE NOT NULL,
                 notes TEXT,
+                cover_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",

@@ -14,12 +14,12 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<Book>> {
     let query = if let Some(l) = limit {
         format!(
             "SELECT id, title, author, isbn, genre, pages, rating, started_date,
-             completed_date, notes FROM books ORDER BY completed_date DESC LIMIT {}",
+             completed_date, notes, cover_path FROM books ORDER BY completed_date DESC LIMIT {}",
             l
         )
     } else {
         "SELECT id, title, author, isbn, genre, pages, rating, started_date,
-         completed_date, notes FROM books ORDER BY completed_date DESC"
+         completed_date, notes, cover_path FROM books ORDER BY completed_date DESC"
             .to_string()
     };
 
@@ -37,6 +37,7 @@ pub fn get_all(conn: &Connection, limit: Option<i32>) -> Result<Vec<Book>> {
                 started_date: row.get(7)?,
                 completed_date: row.get(8)?,
                 notes: row.get(9)?,
+                cover_path: row.get(10)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -50,7 +51,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<Book>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, title, author, isbn, genre, pages, rating, started_date,
-         completed_date, notes FROM books WHERE id = ?",
+         completed_date, notes, cover_path FROM books WHERE id = ?",
     )?;
 
     let book = stmt
@@ -66,6 +67,7 @@ pub fn get_by_id(conn: &Connection, id: i32) -> Result<Option<Book>> {
                 started_date: row.get(7)?,
                 completed_date: row.get(8)?,
                 notes: row.get(9)?,
+                cover_path: row.get(10)?,
             })
         })
         .optional()?;
@@ -79,7 +81,7 @@ pub fn get_by_author(conn: &Connection, author: &str) -> Result<Vec<Book>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, title, author, isbn, genre, pages, rating, started_date,
-         completed_date, notes FROM books WHERE author LIKE ? ORDER BY completed_date DESC",
+         completed_date, notes, cover_path FROM books WHERE author LIKE ? ORDER BY completed_date DESC",
     )?;
 
     let books = stmt
@@ -95,6 +97,7 @@ pub fn get_by_author(conn: &Connection, author: &str) -> Result<Vec<Book>> {
                 started_date: row.get(7)?,
                 completed_date: row.get(8)?,
                 notes: row.get(9)?,
+                cover_path: row.get(10)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -108,7 +111,7 @@ pub fn get_by_genre(conn: &Connection, genre: &str) -> Result<Vec<Book>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, title, author, isbn, genre, pages, rating, started_date,
-         completed_date, notes FROM books WHERE genre LIKE ? ORDER BY completed_date DESC",
+         completed_date, notes, cover_path FROM books WHERE genre LIKE ? ORDER BY completed_date DESC",
     )?;
 
     let books = stmt
@@ -124,6 +127,7 @@ pub fn get_by_genre(conn: &Connection, genre: &str) -> Result<Vec<Book>> {
                 started_date: row.get(7)?,
                 completed_date: row.get(8)?,
                 notes: row.get(9)?,
+                cover_path: row.get(10)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -139,7 +143,7 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
 
         conn.execute_batch(
-            "CREATE TABLE books (
+            "CREATE TABLE IF NOT EXISTS books (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 author TEXT NOT NULL,
@@ -150,6 +154,7 @@ mod tests {
                 started_date DATE,
                 completed_date DATE NOT NULL,
                 notes TEXT,
+                cover_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -172,8 +177,8 @@ mod tests {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO books (title, author, isbn, genre, pages, rating, started_date,
-             completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             completed_date, notes, cover_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         let id = stmt
@@ -186,7 +191,8 @@ mod tests {
                 &book.rating,
                 &book.started_date,
                 &book.completed_date,
-                &book.notes
+                &book.notes,
+                &book.cover_path,
             ])
             .unwrap();
 
@@ -212,8 +218,8 @@ mod tests {
         let mut stmt = conn
             .prepare(
                 "INSERT INTO books (title, author, isbn, genre, pages, rating, started_date,
-             completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             completed_date, notes, cover_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -225,15 +231,16 @@ mod tests {
             &book1.rating,
             &book1.started_date,
             &book1.completed_date,
-            &book1.notes
+            &book1.notes,
+            &book1.cover_path,
         ])
         .unwrap();
 
         let mut stmt = conn
             .prepare(
                 "INSERT INTO books (title, author, isbn, genre, pages, rating, started_date,
-             completed_date, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             completed_date, notes, cover_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .unwrap();
         stmt.insert(rusqlite::params![
@@ -245,12 +252,56 @@ mod tests {
             &book2.rating,
             &book2.started_date,
             &book2.completed_date,
-            &book2.notes
+            &book2.notes,
+            &book2.cover_path,
         ])
         .unwrap();
 
         let books = get_by_author(&conn, "Asimov").unwrap();
         assert_eq!(books.len(), 1);
         assert_eq!(books[0].author, "Isaac Asimov");
+    }
+
+    #[test]
+    fn test_get_book_with_cover_path() {
+        let conn = setup_test_db();
+        let book = Book::new(
+            "The Rust Book".to_string(),
+            "Steve Klabnik".to_string(),
+            "2024-01-25".to_string(),
+        )
+        .with_pages(500)
+        .with_cover_path("/images/covers/rust_book.jpg".to_string());
+
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO books (title, author, isbn, genre, pages, rating, started_date,
+             completed_date, notes, cover_path)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .unwrap();
+        let id = stmt
+            .insert(rusqlite::params![
+                &book.title,
+                &book.author,
+                &book.isbn,
+                &book.genre,
+                &book.pages,
+                &book.rating,
+                &book.started_date,
+                &book.completed_date,
+                &book.notes,
+                &book.cover_path,
+            ])
+            .unwrap();
+
+        let retrieved = get_by_id(&conn, id as i32).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.title, "The Rust Book");
+        assert_eq!(
+            retrieved.cover_path,
+            Some("/images/covers/rust_book.jpg".to_string())
+        );
     }
 }

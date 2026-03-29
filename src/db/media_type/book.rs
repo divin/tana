@@ -18,6 +18,7 @@ pub struct Book {
     pub started_date: Option<String>,
     pub completed_date: String,
     pub notes: Option<String>,
+    pub cover_path: Option<String>,
 }
 
 impl Book {
@@ -34,6 +35,7 @@ impl Book {
             started_date: None,
             completed_date,
             notes: None,
+            cover_path: None,
         }
     }
 
@@ -70,6 +72,12 @@ impl Book {
     /// Add notes
     pub fn with_notes(mut self, notes: String) -> Self {
         self.notes = Some(notes);
+        self
+    }
+
+    /// Add a cover path
+    pub fn with_cover_path(mut self, path: String) -> Self {
+        self.cover_path = Some(path);
         self
     }
 }
@@ -132,5 +140,34 @@ mod tests {
         assert_eq!(Book::media_type_name(), "book");
         assert_eq!(book.title(), "1984");
         assert_eq!(book.date_added(), "2026-02-10");
+    }
+
+    #[test]
+    fn test_book_with_cover_path() {
+        let book = Book::new(
+            "The Rust Book".to_string(),
+            "Steve Klabnik".to_string(),
+            "2024-01-26".to_string(),
+        )
+        .with_pages(500)
+        .with_rating(8.5)
+        .with_cover_path("/images/covers/rust_book.jpg".to_string());
+
+        assert_eq!(book.title, "The Rust Book");
+        assert_eq!(
+            book.cover_path,
+            Some("/images/covers/rust_book.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_book_without_cover_path() {
+        let book = Book::new(
+            "1984".to_string(),
+            "George Orwell".to_string(),
+            "2026-02-10".to_string(),
+        );
+
+        assert_eq!(book.cover_path, None);
     }
 }

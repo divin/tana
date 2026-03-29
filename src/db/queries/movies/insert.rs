@@ -12,8 +12,8 @@ pub fn insert(conn: &Connection, movie: &Movie) -> Result<i32> {
     debug!("Inserting movie: {}", movie.title);
 
     let mut stmt = conn.prepare(
-        "INSERT INTO movies (title, release_year, director, rating, watched_date, notes)
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO movies (title, release_year, director, rating, watched_date, notes, poster_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
     )?;
 
     let id = stmt.insert(params![
@@ -23,6 +23,7 @@ pub fn insert(conn: &Connection, movie: &Movie) -> Result<i32> {
         &movie.rating,
         &movie.watched_date,
         &movie.notes,
+        &movie.poster_path,
     ])?;
 
     Ok(id as i32)
@@ -44,6 +45,7 @@ mod tests {
                 rating REAL,
                 watched_date DATE NOT NULL,
                 notes TEXT,
+                poster_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );",
@@ -62,5 +64,24 @@ mod tests {
 
         let id = insert(&conn, &movie).unwrap();
         assert!(id > 0);
+    }
+
+    #[test]
+    fn test_insert_movie_with_poster_path() {
+        let conn = setup_test_db();
+        let movie = Movie::new("Inception".to_string(), "2024-01-15".to_string())
+            .with_year(2010)
+            .with_director("Christopher Nolan".to_string())
+            .with_poster_path("/images/inception.jpg".to_string());
+
+        let id = insert(&conn, &movie).unwrap();
+        assert!(id > 0);
+
+        // Verify the poster_path was inserted
+        let mut stmt = conn
+            .prepare("SELECT poster_path FROM movies WHERE id = ?")
+            .unwrap();
+        let poster_path: Option<String> = stmt.query_row([id], |row| row.get(0)).unwrap();
+        assert_eq!(poster_path, Some("/images/inception.jpg".to_string()));
     }
 }
