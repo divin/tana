@@ -8,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod image;
+pub mod server;
 
 pub use cli::context;
 pub use error::{Result, TanaError};

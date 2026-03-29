@@ -8,6 +8,7 @@ pub mod context;
 pub mod delete;
 pub mod edit;
 pub mod search;
+pub mod serve;
 pub mod show;
 pub mod stats;
 
@@ -55,6 +56,10 @@ pub enum Commands {
     /// Search for media entries
     #[command(about = "Search across all media types")]
     Search(search::SearchCommand),
+
+    /// Serve the REST API server
+    #[command(about = "Start the REST API server")]
+    Serve(serve::ServeCommand),
 
     /// Show media entries
     #[command(about = "Display media entries with optional filtering")]
@@ -104,6 +109,7 @@ impl Cli {
             Commands::Edit(cmd) => cmd.execute(&ctx)?,
             Commands::Delete(cmd) => cmd.execute(&ctx)?,
             Commands::Search(cmd) => cmd.execute(&ctx)?,
+            Commands::Serve(cmd) => cmd.execute(&ctx)?,
             Commands::Show(cmd) => cmd.execute(&ctx)?,
             Commands::Stats(cmd) => cmd.execute(&ctx)?,
         }
