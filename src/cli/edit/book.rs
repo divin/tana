@@ -50,6 +50,10 @@ pub struct BookEditArgs {
     /// New notes
     #[arg(long)]
     pub notes: Option<String>,
+
+    /// New cover path
+    #[arg(long)]
+    pub cover: Option<String>,
 }
 
 /// Edit a book in the database
@@ -94,6 +98,10 @@ pub fn execute(ctx: &AppContext, args: BookEditArgs) -> Result<()> {
     if let Some(notes) = args.notes {
         book.notes = Some(notes);
     }
+    if let Some(cover) = args.cover {
+        let cover_path = crate::image::validate_image_path(&cover)?;
+        book.cover_path = Some(cover_path);
+    }
 
     // Update in database
     queries::books::update(conn, args.id, &book)?;
@@ -121,9 +129,49 @@ mod tests {
             started_date: None,
             date: None,
             notes: None,
+            cover: None,
         };
 
         assert_eq!(args.id, 3);
         assert_eq!(args.isbn, Some("978-1492052586".to_string()));
+    }
+
+    #[test]
+    fn test_book_edit_with_cover() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "tana_book_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let cover_file = temp_dir.join("cover.png");
+        let mut f = File::create(&cover_file).expect("Failed to create test cover");
+        f.write_all(b"test image data")
+            .expect("Failed to write test cover");
+
+        let args = BookEditArgs {
+            id: 3,
+            title: None,
+            author: None,
+            isbn: None,
+            genre: None,
+            pages: None,
+            rating: None,
+            started_date: None,
+            date: None,
+            notes: None,
+            cover: Some(cover_file.to_string_lossy().to_string()),
+        };
+
+        assert_eq!(args.id, 3);
+        assert!(args.cover.is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

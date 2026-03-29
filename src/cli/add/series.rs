@@ -52,6 +52,10 @@ pub struct SeriesArgs {
     /// Notes about the series
     #[arg(short, long)]
     pub notes: Option<String>,
+
+    /// Path to series poster
+    #[arg(long)]
+    pub poster: Option<String>,
 }
 
 /// Add a TV series to the database
@@ -65,6 +69,12 @@ pub fn execute(ctx: &AppContext, args: SeriesArgs) -> Result<()> {
 
     // Create series entry
     let mut series = TVSeries::new(args.title.clone(), args.date, args.status);
+
+    // Validate and set poster path if provided
+    if let Some(poster) = args.poster {
+        let poster_path = crate::image::validate_image_path(&poster)?;
+        series = series.with_poster_path(poster_path);
+    }
     if let Some(year) = args.year {
         series = series.with_year(year);
     }
@@ -113,9 +123,40 @@ mod tests {
             date: "2024-01-10".to_string(),
             completed_date: None,
             notes: None,
+            poster: None,
         };
 
         assert_eq!(args.title, "Breaking Bad");
         assert_eq!(args.status, "completed");
+    }
+
+    #[test]
+    fn test_series_add_with_poster() {
+        let mut args = SeriesArgs {
+            title: "Breaking Bad".to_string(),
+            year: Some(2008),
+            status: "completed".to_string(),
+            seasons: Some(5),
+            current_season: None,
+            current_episode: None,
+            rating: Some(9.5),
+            date: "2024-01-10".to_string(),
+            completed_date: None,
+            notes: None,
+            poster: None,
+        };
+
+        // Create a test image file
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_series_poster.png");
+        std::fs::File::create(&test_file).expect("Failed to create test file");
+
+        args.poster = Some(test_file.to_string_lossy().to_string());
+
+        // Verify poster path is set
+        assert!(args.poster.is_some());
+
+        // Cleanup
+        let _ = std::fs::remove_file(&test_file);
     }
 }

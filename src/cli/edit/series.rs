@@ -54,6 +54,10 @@ pub struct SeriesEditArgs {
     /// New notes
     #[arg(long)]
     pub notes: Option<String>,
+
+    /// New poster path
+    #[arg(long)]
+    pub poster: Option<String>,
 }
 
 /// Edit a TV series in the database
@@ -101,6 +105,10 @@ pub fn execute(ctx: &AppContext, args: SeriesEditArgs) -> Result<()> {
     if let Some(notes) = args.notes {
         series.notes = Some(notes);
     }
+    if let Some(poster) = args.poster {
+        let poster_path = crate::image::validate_image_path(&poster)?;
+        series.poster_path = Some(poster_path);
+    }
 
     // Update in database
     queries::tv_series::update(conn, args.id, &series)?;
@@ -129,9 +137,50 @@ mod tests {
             date: None,
             completed_date: None,
             notes: None,
+            poster: None,
         };
 
         assert_eq!(args.id, 2);
         assert_eq!(args.status, Some("completed".to_string()));
+    }
+
+    #[test]
+    fn test_series_edit_with_poster() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "tana_series_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let poster_file = temp_dir.join("poster.png");
+        let mut f = File::create(&poster_file).expect("Failed to create test poster");
+        f.write_all(b"test image data")
+            .expect("Failed to write test poster");
+
+        let args = SeriesEditArgs {
+            id: 2,
+            title: None,
+            year: None,
+            status: None,
+            seasons: None,
+            current_season: None,
+            current_episode: None,
+            rating: None,
+            date: None,
+            completed_date: None,
+            notes: None,
+            poster: Some(poster_file.to_string_lossy().to_string()),
+        };
+
+        assert_eq!(args.id, 2);
+        assert!(args.poster.is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

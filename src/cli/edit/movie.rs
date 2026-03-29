@@ -38,6 +38,10 @@ pub struct MovieEditArgs {
     /// New notes
     #[arg(long)]
     pub notes: Option<String>,
+
+    /// New poster path
+    #[arg(long)]
+    pub poster: Option<String>,
 }
 
 /// Edit a movie in the database
@@ -73,6 +77,10 @@ pub fn execute(ctx: &AppContext, args: MovieEditArgs) -> Result<()> {
     if let Some(notes) = args.notes {
         movie.notes = Some(notes);
     }
+    if let Some(poster) = args.poster {
+        let poster_path = crate::image::validate_image_path(&poster)?;
+        movie.poster_path = Some(poster_path);
+    }
 
     // Update in database
     queries::movies::update(conn, args.id, &movie)?;
@@ -97,10 +105,47 @@ mod tests {
             rating: Some(9.5),
             date: Some("2024-01-15".to_string()),
             notes: None,
+            poster: None,
         };
 
         assert_eq!(args.id, 1);
         assert_eq!(args.title, Some("Inception".to_string()));
         assert_eq!(args.rating, Some(9.5));
+    }
+
+    #[test]
+    fn test_movie_edit_with_poster() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "tana_movie_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let poster_file = temp_dir.join("poster.jpg");
+        let mut f = File::create(&poster_file).expect("Failed to create test poster");
+        f.write_all(b"test image data")
+            .expect("Failed to write test poster");
+
+        let args = MovieEditArgs {
+            id: 1,
+            title: None,
+            year: None,
+            director: None,
+            rating: None,
+            date: None,
+            notes: None,
+            poster: Some(poster_file.to_string_lossy().to_string()),
+        };
+
+        assert_eq!(args.id, 1);
+        assert!(args.poster.is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

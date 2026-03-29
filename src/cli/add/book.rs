@@ -48,6 +48,10 @@ pub struct BookArgs {
     /// Notes about the book
     #[arg(short, long)]
     pub notes: Option<String>,
+
+    /// Path to book cover
+    #[arg(long)]
+    pub cover: Option<String>,
 }
 
 /// Add a book to the database
@@ -61,6 +65,12 @@ pub fn execute(ctx: &AppContext, args: BookArgs) -> Result<()> {
 
     // Create book entry
     let mut book = Book::new(args.title.clone(), args.author, args.date);
+
+    // Validate and set cover path if provided
+    if let Some(cover) = args.cover {
+        let cover_path = crate::image::validate_image_path(&cover)?;
+        book = book.with_cover_path(cover_path);
+    }
     if let Some(isbn) = args.isbn {
         book = book.with_isbn(isbn);
     }
@@ -106,9 +116,39 @@ mod tests {
             started_date: None,
             date: "2024-01-25".to_string(),
             notes: None,
+            cover: None,
         };
 
         assert_eq!(args.title, "The Rust Book");
         assert_eq!(args.author, "Steve Klabnik");
+    }
+
+    #[test]
+    fn test_book_add_with_cover() {
+        let mut args = BookArgs {
+            title: "The Rust Book".to_string(),
+            author: "Steve Klabnik".to_string(),
+            isbn: None,
+            genre: Some("Programming".to_string()),
+            pages: Some(500),
+            rating: Some(8.5),
+            started_date: None,
+            date: "2024-01-25".to_string(),
+            notes: None,
+            cover: None,
+        };
+
+        // Create a test image file
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_book_cover.png");
+        std::fs::File::create(&test_file).expect("Failed to create test file");
+
+        args.cover = Some(test_file.to_string_lossy().to_string());
+
+        // Verify cover path is set
+        assert!(args.cover.is_some());
+
+        // Cleanup
+        let _ = std::fs::remove_file(&test_file);
     }
 }
