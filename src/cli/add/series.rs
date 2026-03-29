@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::TVSeries;
 use crate::db::queries;
 use crate::error::Result;
@@ -55,7 +55,7 @@ pub struct SeriesArgs {
 }
 
 /// Add a TV series to the database
-pub fn execute(db: &Database, args: SeriesArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: SeriesArgs) -> Result<()> {
     // Validate rating
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -87,7 +87,7 @@ pub fn execute(db: &Database, args: SeriesArgs) -> Result<()> {
     }
 
     // Insert into database
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let id = queries::tv_series::insert(conn, &series)?;
 
     info!("✓ Added TV series '{}' with ID {}", args.title, id);

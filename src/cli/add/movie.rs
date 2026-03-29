@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::Movie;
 use crate::db::queries;
 use crate::error::Result;
@@ -39,7 +39,7 @@ pub struct MovieArgs {
 }
 
 /// Add a movie to the database
-pub fn execute(db: &Database, args: MovieArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: MovieArgs) -> Result<()> {
     // Validate rating
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -63,7 +63,7 @@ pub fn execute(db: &Database, args: MovieArgs) -> Result<()> {
     }
 
     // Insert into database
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let id = queries::movies::insert(conn, &movie)?;
 
     info!("✓ Added movie '{}' with ID {}", args.title, id);

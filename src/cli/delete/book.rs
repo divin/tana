@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -17,8 +17,8 @@ pub struct BookDeleteArgs {
 }
 
 /// Delete a book from the database
-pub fn execute(db: &Database, args: BookDeleteArgs) -> Result<()> {
-    let conn = db.connection();
+pub fn execute(ctx: &AppContext, args: BookDeleteArgs) -> Result<()> {
+    let conn = ctx.db().connection();
 
     // Fetch the book to get its title for the confirmation message
     let book = queries::books::get_by_id(conn, args.id)?

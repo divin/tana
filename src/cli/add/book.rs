@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::Book;
 use crate::db::queries;
 use crate::error::Result;
@@ -51,7 +51,7 @@ pub struct BookArgs {
 }
 
 /// Add a book to the database
-pub fn execute(db: &Database, args: BookArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: BookArgs) -> Result<()> {
     // Validate rating
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -81,7 +81,7 @@ pub fn execute(db: &Database, args: BookArgs) -> Result<()> {
     }
 
     // Insert into database
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let id = queries::books::insert(conn, &book)?;
 
     info!("✓ Added book '{}' with ID {}", args.title, id);

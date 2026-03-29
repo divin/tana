@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -17,8 +17,8 @@ pub struct MovieDeleteArgs {
 }
 
 /// Delete a movie from the database
-pub fn execute(db: &Database, args: MovieDeleteArgs) -> Result<()> {
-    let conn = db.connection();
+pub fn execute(ctx: &AppContext, args: MovieDeleteArgs) -> Result<()> {
+    let conn = ctx.db().connection();
 
     // Fetch the movie to get its title for the confirmation message
     let movie = queries::movies::get_by_id(conn, args.id)?

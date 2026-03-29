@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -41,7 +41,7 @@ pub struct MovieEditArgs {
 }
 
 /// Edit a movie in the database
-pub fn execute(db: &Database, args: MovieEditArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: MovieEditArgs) -> Result<()> {
     // Validate rating if provided
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -50,7 +50,7 @@ pub fn execute(db: &Database, args: MovieEditArgs) -> Result<()> {
     }
 
     // Fetch existing movie
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let mut movie = queries::movies::get_by_id(conn, args.id)?
         .ok_or_else(|| crate::TanaError::MediaNotFound(format!("Movie with ID {}", args.id)))?;
 

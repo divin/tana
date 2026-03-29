@@ -13,7 +13,7 @@ pub use series::SeriesEditArgs;
 
 use clap::{Args, Subcommand};
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::error::Result;
 
 /// Arguments for the edit command
@@ -37,11 +37,11 @@ pub enum MediaTypeCommand {
 
 impl EditCommand {
     /// Execute the edit command
-    pub fn execute(self, db: &Database) -> Result<()> {
+    pub fn execute(self, ctx: &AppContext) -> Result<()> {
         match self.media_type {
-            MediaTypeCommand::Movie(args) => movie::execute(db, args),
-            MediaTypeCommand::Series(args) => series::execute(db, args),
-            MediaTypeCommand::Book(args) => book::execute(db, args),
+            MediaTypeCommand::Movie(args) => movie::execute(ctx, args),
+            MediaTypeCommand::Series(args) => series::execute(ctx, args),
+            MediaTypeCommand::Book(args) => book::execute(ctx, args),
         }
     }
 }

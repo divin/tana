@@ -24,7 +24,7 @@
 use clap::Args;
 use serde::Serialize;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::Book;
 use crate::db::queries;
 use crate::error::Result;
@@ -159,8 +159,8 @@ impl From<Book> for BookEntry {
 /// - Database query fails
 /// - Invalid format string is provided
 /// - JSON serialization fails
-pub fn execute(db: &Database, args: BooksShowArgs) -> Result<()> {
-    let conn = db.connection();
+pub fn execute(ctx: &AppContext, args: BooksShowArgs) -> Result<()> {
+    let conn = ctx.db().connection();
     let mut books = queries::books::get_all(conn, None)?;
 
     // Apply author filter
@@ -199,11 +199,12 @@ pub fn execute(db: &Database, args: BooksShowArgs) -> Result<()> {
     // Format and display output
     let format_str = args.format.to_lowercase();
     let format = format_str.parse::<Format>()?;
+    let truncate_length = ctx.truncate_length();
 
     match format {
-        Format::Plain => display_plain(&books),
+        Format::Plain => display_plain(&books, truncate_length),
         Format::Json => display_json(&books)?,
-        Format::Csv => display_csv(&books),
+        Format::Csv => display_csv(&books, truncate_length),
     }
 
     Ok(())
@@ -225,7 +226,7 @@ pub fn execute(db: &Database, args: BooksShowArgs) -> Result<()> {
 /// # Arguments
 ///
 /// * `books` - Slice of books to display
-fn display_plain(books: &[Book]) {
+fn display_plain(books: &[Book], truncate_length: usize) {
     if books.is_empty() {
         println!("No books found.");
         return;
@@ -239,12 +240,12 @@ fn display_plain(books: &[Book]) {
     println!("{}", "=".repeat(120));
 
     for book in books {
-        let title = truncate(&book.title, 28);
-        let author = truncate(&book.author, 18);
+        let title = truncate(&book.title, truncate_length.min(28));
+        let author = truncate(&book.author, truncate_length.min(18));
         let genre = book
             .genre
             .as_ref()
-            .map(|g| truncate(g, 13))
+            .map(|g| truncate(g, truncate_length.min(13)))
             .unwrap_or_else(|| "—".to_string());
         let pages = book
             .pages
@@ -304,7 +305,7 @@ fn display_json(books: &[Book]) -> Result<()> {
 /// # Arguments
 ///
 /// * `books` - Slice of books to export as CSV
-fn display_csv(books: &[Book]) {
+fn display_csv(books: &[Book], _truncate_length: usize) {
     use super::format::escape_csv;
 
     println!("ID,Title,Author,Genre,Pages,Rating,CompletedDate,ISBN,Notes");

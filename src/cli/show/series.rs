@@ -5,7 +5,7 @@
 use clap::Args;
 use serde::Serialize;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::TVSeries;
 use crate::db::queries;
 use crate::error::Result;
@@ -79,8 +79,8 @@ impl From<TVSeries> for SeriesEntry {
 }
 
 /// Execute the show TV series command
-pub fn execute(db: &Database, args: SeriesShowArgs) -> Result<()> {
-    let conn = db.connection();
+pub fn execute(ctx: &AppContext, args: SeriesShowArgs) -> Result<()> {
+    let conn = ctx.db().connection();
     let mut series = queries::tv_series::get_all(conn, None)?;
 
     // Apply filters
@@ -111,18 +111,19 @@ pub fn execute(db: &Database, args: SeriesShowArgs) -> Result<()> {
     // Format output
     let format_str = args.format.to_lowercase();
     let format = format_str.parse::<Format>()?;
+    let truncate_length = ctx.truncate_length();
 
     match format {
-        Format::Plain => display_plain(&series),
+        Format::Plain => display_plain(&series, truncate_length),
         Format::Json => display_json(&series)?,
-        Format::Csv => display_csv(&series),
+        Format::Csv => display_csv(&series, truncate_length),
     }
 
     Ok(())
 }
 
 /// Display TV series in plain text format
-fn display_plain(series_list: &[TVSeries]) {
+fn display_plain(series_list: &[TVSeries], _truncate_length: usize) {
     if series_list.is_empty() {
         println!("No series found.");
         return;
@@ -176,7 +177,7 @@ fn display_json(series_list: &[TVSeries]) -> Result<()> {
 }
 
 /// Display TV series in CSV format
-fn display_csv(series_list: &[TVSeries]) {
+fn display_csv(series_list: &[TVSeries], _truncate_length: usize) {
     use super::format::escape_csv;
 
     println!(

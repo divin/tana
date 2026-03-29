@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -53,7 +53,7 @@ pub struct BookEditArgs {
 }
 
 /// Edit a book in the database
-pub fn execute(db: &Database, args: BookEditArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: BookEditArgs) -> Result<()> {
     // Validate rating if provided
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -62,7 +62,7 @@ pub fn execute(db: &Database, args: BookEditArgs) -> Result<()> {
     }
 
     // Fetch existing book
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let mut book = queries::books::get_by_id(conn, args.id)?
         .ok_or_else(|| crate::TanaError::MediaNotFound(format!("Book with ID {}", args.id)))?;
 

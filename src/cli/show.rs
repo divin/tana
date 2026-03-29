@@ -11,7 +11,7 @@ pub mod series;
 use clap::{Args, Subcommand};
 use tracing::debug;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::error::Result;
 
 pub use books::BooksShowArgs;
@@ -48,22 +48,22 @@ pub enum ShowSubcommand {
 
 impl ShowCommand {
     /// Execute the show command
-    pub fn execute(self, db: &Database) -> Result<()> {
+    pub fn execute(self, ctx: &AppContext) -> Result<()> {
         debug!("Executing show command");
 
         match self.subcommand {
             Some(ShowSubcommand::Movies(args)) => {
-                movie::execute(db, args)?;
+                movie::execute(ctx, args)?;
             }
             Some(ShowSubcommand::Series(args)) => {
-                series::execute(db, args)?;
+                series::execute(ctx, args)?;
             }
             Some(ShowSubcommand::Books(args)) => {
-                books::execute(db, args)?;
+                books::execute(ctx, args)?;
             }
             None => {
                 // Show all media types
-                show_all(db, self.recent, self.limit)?;
+                show_all(ctx, self.recent, self.limit)?;
             }
         }
 
@@ -72,10 +72,10 @@ impl ShowCommand {
 }
 
 /// Show all media types (when no subcommand is specified)
-fn show_all(db: &Database, _recent: Option<u32>, limit: Option<i32>) -> Result<()> {
+fn show_all(ctx: &AppContext, _recent: Option<u32>, limit: Option<i32>) -> Result<()> {
     use crate::db::queries;
 
-    let conn = db.connection();
+    let conn = ctx.db().connection();
 
     // Fetch all media
     let mut movies = queries::movies::get_all(conn, None)?;

@@ -6,7 +6,7 @@
 use clap::Args;
 use tracing::debug;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -17,17 +17,18 @@ pub struct SearchCommand {
     pub query: String,
 
     /// Limit number of results per media type
-    #[arg(long, default_value = "10")]
-    pub limit: i32,
+    #[arg(long)]
+    pub limit: Option<i32>,
 }
 
 impl SearchCommand {
     /// Execute the search command
-    pub fn execute(self, db: &Database) -> Result<()> {
+    pub fn execute(self, ctx: &AppContext) -> Result<()> {
         debug!("Searching for: {}", self.query);
 
-        let conn = db.connection();
+        let conn = ctx.db().connection();
         let query_lower = self.query.to_lowercase();
+        let limit = self.limit.unwrap_or_else(|| ctx.results_per_page() as i32);
 
         // Search movies
         let all_movies = queries::movies::get_all(conn, None)?;
@@ -44,7 +45,7 @@ impl SearchCommand {
                         .map(|n| n.to_lowercase().contains(&query_lower))
                         .unwrap_or(false)
             })
-            .take(self.limit as usize)
+            .take(limit as usize)
             .collect();
 
         // Search TV series
@@ -59,7 +60,7 @@ impl SearchCommand {
                         .map(|n| n.to_lowercase().contains(&query_lower))
                         .unwrap_or(false)
             })
-            .take(self.limit as usize)
+            .take(limit as usize)
             .collect();
 
         // Search books
@@ -78,7 +79,7 @@ impl SearchCommand {
                         .map(|n| n.to_lowercase().contains(&query_lower))
                         .unwrap_or(false)
             })
-            .take(self.limit as usize)
+            .take(limit as usize)
             .collect();
 
         // Display results
@@ -172,22 +173,22 @@ mod tests {
     fn test_search_command_creation() {
         let cmd = SearchCommand {
             query: "inception".to_string(),
-            limit: 10,
+            limit: Some(10),
         };
 
         assert_eq!(cmd.query, "inception");
-        assert_eq!(cmd.limit, 10);
+        assert_eq!(cmd.limit, Some(10));
     }
 
     #[test]
     fn test_search_command_custom_limit() {
         let cmd = SearchCommand {
             query: "test".to_string(),
-            limit: 5,
+            limit: Some(5),
         };
 
         assert_eq!(cmd.query, "test");
-        assert_eq!(cmd.limit, 5);
+        assert_eq!(cmd.limit, Some(5));
     }
 
     #[test]

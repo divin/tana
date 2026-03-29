@@ -5,7 +5,7 @@
 use clap::Args;
 use serde::Serialize;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::models::Movie;
 use crate::db::queries;
 use crate::error::Result;
@@ -71,8 +71,8 @@ impl From<Movie> for MovieEntry {
 }
 
 /// Execute the show movies command
-pub fn execute(db: &Database, args: MoviesShowArgs) -> Result<()> {
-    let conn = db.connection();
+pub fn execute(ctx: &AppContext, args: MoviesShowArgs) -> Result<()> {
+    let conn = ctx.db().connection();
     let mut movies = queries::movies::get_all(conn, None)?;
 
     // Apply filters
@@ -108,18 +108,19 @@ pub fn execute(db: &Database, args: MoviesShowArgs) -> Result<()> {
     // Format output
     let format_str = args.format.to_lowercase();
     let format = format_str.parse::<Format>()?;
+    let truncate_length = ctx.truncate_length();
 
     match format {
-        Format::Plain => display_plain(&movies),
+        Format::Plain => display_plain(&movies, truncate_length),
         Format::Json => display_json(&movies)?,
-        Format::Csv => display_csv(&movies),
+        Format::Csv => display_csv(&movies, truncate_length),
     }
 
     Ok(())
 }
 
 /// Display movies in plain text format
-fn display_plain(movies: &[Movie]) {
+fn display_plain(movies: &[Movie], _truncate_length: usize) {
     if movies.is_empty() {
         println!("No movies found.");
         return;
@@ -169,7 +170,7 @@ fn display_json(movies: &[Movie]) -> Result<()> {
 }
 
 /// Display movies in CSV format
-fn display_csv(movies: &[Movie]) {
+fn display_csv(movies: &[Movie], _truncate_length: usize) {
     use super::format::escape_csv;
 
     println!("ID,Title,Year,Director,Rating,WatchedDate,Notes");

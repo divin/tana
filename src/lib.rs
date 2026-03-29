@@ -8,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 
+pub use cli::context;
 pub use error::{Result, TanaError};
 
 /// Version information

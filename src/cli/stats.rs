@@ -3,7 +3,8 @@
 use clap::{Args, Subcommand};
 use tracing::debug;
 
-use crate::db::{Database, queries, schema::SchemaInfo};
+use crate::cli::context::AppContext;
+use crate::db::{queries, schema::SchemaInfo};
 use crate::error::Result;
 
 /// Arguments for the stats command
@@ -27,21 +28,21 @@ pub enum StatsSubcommand {
 
 impl StatsCommand {
     /// Execute the stats command
-    pub fn execute(self, db: &Database) -> Result<()> {
+    pub fn execute(self, ctx: &AppContext) -> Result<()> {
         match self.subcommand {
-            Some(StatsSubcommand::Movies) => show_movies_stats(db),
-            Some(StatsSubcommand::Series) => show_series_stats(db),
-            Some(StatsSubcommand::Books) => show_books_stats(db),
-            None => show_overall_stats(db),
+            Some(StatsSubcommand::Movies) => show_movies_stats(ctx),
+            Some(StatsSubcommand::Series) => show_series_stats(ctx),
+            Some(StatsSubcommand::Books) => show_books_stats(ctx),
+            None => show_overall_stats(ctx),
         }
     }
 }
 
 /// Display overall statistics
-fn show_overall_stats(db: &Database) -> Result<()> {
+fn show_overall_stats(ctx: &AppContext) -> Result<()> {
     debug!("Showing overall stats");
 
-    let conn = db.connection();
+    let conn = ctx.db().connection();
 
     // Get counts
     let movie_count = queries::movies::count(conn)?;
@@ -65,10 +66,10 @@ fn show_overall_stats(db: &Database) -> Result<()> {
 }
 
 /// Display movie statistics
-fn show_movies_stats(db: &Database) -> Result<()> {
+fn show_movies_stats(ctx: &AppContext) -> Result<()> {
     debug!("Showing movie stats");
 
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let movies = queries::movies::get_all(conn, None)?;
 
     if movies.is_empty() {
@@ -91,10 +92,10 @@ fn show_movies_stats(db: &Database) -> Result<()> {
 }
 
 /// Display TV series statistics
-fn show_series_stats(db: &Database) -> Result<()> {
+fn show_series_stats(ctx: &AppContext) -> Result<()> {
     debug!("Showing series stats");
 
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let series_list = queries::tv_series::get_all(conn, None)?;
 
     if series_list.is_empty() {
@@ -124,10 +125,10 @@ fn show_series_stats(db: &Database) -> Result<()> {
 }
 
 /// Display book statistics
-fn show_books_stats(db: &Database) -> Result<()> {
+fn show_books_stats(ctx: &AppContext) -> Result<()> {
     debug!("Showing book stats");
 
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let books = queries::books::get_all(conn, None)?;
 
     if books.is_empty() {

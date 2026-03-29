@@ -4,6 +4,7 @@
 //! It defines the command structure, argument parsing, and command dispatching.
 
 pub mod add;
+pub mod context;
 pub mod delete;
 pub mod edit;
 pub mod search;
@@ -13,6 +14,8 @@ pub mod stats;
 use clap::{Parser, Subcommand};
 use tracing_subscriber;
 
+use crate::cli::context::AppContext;
+use crate::config::Config;
 use crate::db::Database;
 use crate::error::Result;
 
@@ -65,8 +68,14 @@ pub enum Commands {
 impl Cli {
     /// Execute the CLI command
     pub fn execute(self) -> Result<()> {
+        // Load configuration from file or use defaults
+        let config = Config::load()?;
+
+        // CLI flags override config settings
+        let debug_mode = self.debug || config.debug();
+
         // Initialize logging
-        if self.debug {
+        if debug_mode {
             tracing_subscriber::fmt()
                 .with_max_level(tracing::Level::DEBUG)
                 .init();
@@ -76,24 +85,27 @@ impl Cli {
                 .init();
         }
 
-        // Get database path
+        // Get database path (CLI flag overrides config)
         let db_path = if let Some(path) = self.db {
             path
         } else {
-            Database::default_path().to_string_lossy().to_string()
+            config.database_path().to_string_lossy().to_string()
         };
 
         // Open database
         let db = Database::open(&db_path)?;
 
+        // Create application context with database and config
+        let ctx = AppContext::new(db, config);
+
         // Execute the command
         match self.command {
-            Commands::Add(cmd) => cmd.execute(&db)?,
-            Commands::Edit(cmd) => cmd.execute(&db)?,
-            Commands::Delete(cmd) => cmd.execute(&db)?,
-            Commands::Search(cmd) => cmd.execute(&db)?,
-            Commands::Show(cmd) => cmd.execute(&db)?,
-            Commands::Stats(cmd) => cmd.execute(&db)?,
+            Commands::Add(cmd) => cmd.execute(&ctx)?,
+            Commands::Edit(cmd) => cmd.execute(&ctx)?,
+            Commands::Delete(cmd) => cmd.execute(&ctx)?,
+            Commands::Search(cmd) => cmd.execute(&ctx)?,
+            Commands::Show(cmd) => cmd.execute(&ctx)?,
+            Commands::Stats(cmd) => cmd.execute(&ctx)?,
         }
 
         Ok(())

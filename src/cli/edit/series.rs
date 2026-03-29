@@ -5,7 +5,7 @@
 use clap::Args;
 use tracing::info;
 
-use crate::db::Database;
+use crate::cli::context::AppContext;
 use crate::db::queries;
 use crate::error::Result;
 
@@ -57,7 +57,7 @@ pub struct SeriesEditArgs {
 }
 
 /// Edit a TV series in the database
-pub fn execute(db: &Database, args: SeriesEditArgs) -> Result<()> {
+pub fn execute(ctx: &AppContext, args: SeriesEditArgs) -> Result<()> {
     // Validate rating if provided
     if let Some(rating) = args.rating
         && !(0.0..=10.0).contains(&rating)
@@ -66,7 +66,7 @@ pub fn execute(db: &Database, args: SeriesEditArgs) -> Result<()> {
     }
 
     // Fetch existing series
-    let conn = db.connection();
+    let conn = ctx.db().connection();
     let mut series = queries::tv_series::get_by_id(conn, args.id)?
         .ok_or_else(|| crate::TanaError::MediaNotFound(format!("TV Series with ID {}", args.id)))?;
 
