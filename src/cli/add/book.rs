@@ -1,6 +1,20 @@
 //! Book add command implementation
 //!
 //! This module handles adding new books to the database.
+//!
+//! # Examples
+//!
+//! Add a book with basic information:
+//! ```sh
+//! tana add book --title "The Rust Book" --author "Steve Klabnik" --date 2024-01-25
+//! ```
+//!
+//! Add a book with complete details including a cover image:
+//! ```sh
+//! tana add book --title "The Rust Book" --author "Steve Klabnik" \
+//!   --genre "Programming" --pages 500 --date 2024-01-25 --rating 8.5 \
+//!   --notes "Essential resource for learning Rust" --cover /path/to/cover.jpg
+//! ```
 
 use clap::Args;
 use tracing::info;
@@ -11,45 +25,49 @@ use crate::db::queries;
 use crate::error::Result;
 
 /// Arguments for adding a book
+///
+/// Allows users to add a new book to their collection with optional details
+/// such as author, ISBN, genre, page count, personal rating, and book cover image.
+/// The cover image helps create a visual library of your book collection.
 #[derive(Args, Debug)]
 pub struct BookArgs {
-    /// Title of the book
+    /// Title of the book (required)
     #[arg(short, long)]
     pub title: String,
 
-    /// Author of the book
+    /// Author of the book (required)
     #[arg(short, long)]
     pub author: String,
 
-    /// ISBN of the book
+    /// ISBN of the book (optional)
     #[arg(long)]
     pub isbn: Option<String>,
 
-    /// Genre of the book
+    /// Genre of the book (optional)
     #[arg(short, long)]
     pub genre: Option<String>,
 
-    /// Number of pages
+    /// Number of pages (optional)
     #[arg(short, long)]
     pub pages: Option<i32>,
 
-    /// Your rating (1-10)
+    /// Your rating on a scale of 1-10 (optional)
     #[arg(short, long)]
     pub rating: Option<f64>,
 
-    /// Date you started reading (YYYY-MM-DD)
+    /// Date you started reading in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub started_date: Option<String>,
 
-    /// Date you finished reading (YYYY-MM-DD)
+    /// Date you finished reading in YYYY-MM-DD format (required)
     #[arg(long)]
     pub date: String,
 
-    /// Notes about the book
+    /// Personal notes about the book (optional)
     #[arg(short, long)]
     pub notes: Option<String>,
 
-    /// Path to book cover
+    /// Path to book cover image file. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
     #[arg(long)]
     pub cover: Option<String>,
 }

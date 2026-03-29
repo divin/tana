@@ -1,6 +1,21 @@
 //! TV series add command implementation
 //!
 //! This module handles adding new TV series to the database.
+//!
+//! # Examples
+//!
+//! Add a TV series with basic information:
+//! ```sh
+//! tana add series --title "Breaking Bad" --status completed --date 2024-01-10
+//! ```
+//!
+//! Add a TV series with full details including a poster image:
+//! ```sh
+//! tana add series --title "Breaking Bad" --year 2008 --status completed \
+//!   --seasons 5 --rating 9.5 --date 2024-01-10 \
+//!   --notes "One of the greatest shows ever made" \
+//!   --poster /path/to/poster.jpg
+//! ```
 
 use clap::Args;
 use tracing::info;
@@ -11,49 +26,53 @@ use crate::db::queries;
 use crate::error::Result;
 
 /// Arguments for adding a TV series
+///
+/// Allows users to add a new TV series to their collection with detailed information
+/// including air year, current progress, completion status, personal rating, and
+/// series poster image. The poster image helps visualize your series collection.
 #[derive(Args, Debug)]
 pub struct SeriesArgs {
-    /// Title of the TV series
+    /// Title of the TV series (required)
     #[arg(short, long)]
     pub title: String,
 
-    /// Year the series started airing
+    /// Year the series started airing (optional)
     #[arg(short, long)]
     pub year: Option<i32>,
 
-    /// Status: ongoing, completed, or dropped
+    /// Status: ongoing, completed, or dropped (required)
     #[arg(short, long)]
     pub status: String,
 
-    /// Total number of seasons
+    /// Total number of seasons (optional)
     #[arg(long)]
     pub seasons: Option<i32>,
 
-    /// Current season you're watching
+    /// Current season you're watching (optional)
     #[arg(long)]
     pub current_season: Option<i32>,
 
-    /// Current episode you're watching
+    /// Current episode you're watching (optional)
     #[arg(long)]
     pub current_episode: Option<i32>,
 
-    /// Your rating (1-10)
+    /// Your rating on a scale of 1-10 (optional)
     #[arg(short, long)]
     pub rating: Option<f64>,
 
-    /// Date you started watching (YYYY-MM-DD)
+    /// Date you started watching in YYYY-MM-DD format (required)
     #[arg(long)]
     pub date: String,
 
-    /// Date you completed it (YYYY-MM-DD)
+    /// Date you completed it in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub completed_date: Option<String>,
 
-    /// Notes about the series
+    /// Personal notes about the series (optional)
     #[arg(short, long)]
     pub notes: Option<String>,
 
-    /// Path to series poster
+    /// Path to series poster image file. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
     #[arg(long)]
     pub poster: Option<String>,
 }

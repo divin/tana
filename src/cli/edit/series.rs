@@ -1,6 +1,31 @@
 //! TV series edit command implementation
 //!
 //! This module handles editing existing TV series in the database.
+//! Edit one or more fields of a TV series using command-line flags.
+//!
+//! # Examples
+//!
+//! Update a series' status and rating:
+//! ```sh
+//! tana edit series 2 --status "completed" --rating 9.5
+//! ```
+//!
+//! Edit a series with a new poster image:
+//! ```sh
+//! tana edit series 2 --current-season 5 --current-episode 13 --rating 9.5 --poster /path/to/new_poster.png
+//! ```
+//!
+//! Update series completion information:
+//! ```sh
+//! tana edit series 2 --status "completed" --completed-date "2024-01-15" --rating 9.0 --poster /path/to/poster.jpg
+//! ```
+//!
+//! Update only the title and seasons:
+//! ```sh
+//! tana edit series 2 --title "Updated Title" --seasons 6
+//! ```
+//!
+//! Supported image formats for --poster: PNG, JPG, JPEG, WebP, GIF, BMP
 
 use clap::Args;
 use tracing::info;
@@ -10,52 +35,55 @@ use crate::db::queries;
 use crate::error::Result;
 
 /// Arguments for editing a TV series
+///
+/// All fields are optional except for the series ID. At least one optional field
+/// must be provided to make any changes to the series.
 #[derive(Args, Debug)]
 pub struct SeriesEditArgs {
-    /// ID of the series to edit
+    /// ID of the series to edit (required)
     pub id: i32,
 
-    /// New title
+    /// New title for the series (optional)
     #[arg(long)]
     pub title: Option<String>,
 
-    /// New release year
+    /// New release year for the series (optional)
     #[arg(long)]
     pub year: Option<i32>,
 
-    /// New status (ongoing, completed, dropped)
+    /// New status of the series: ongoing, completed, or dropped (optional)
     #[arg(long)]
     pub status: Option<String>,
 
-    /// New total number of seasons
+    /// New total number of seasons for the series (optional)
     #[arg(long)]
     pub seasons: Option<i32>,
 
-    /// New current season
+    /// New current season being watched (optional)
     #[arg(long)]
     pub current_season: Option<i32>,
 
-    /// New current episode
+    /// New current episode being watched (optional)
     #[arg(long)]
     pub current_episode: Option<i32>,
 
-    /// New rating (1-10)
+    /// New rating on a scale of 1-10 (optional)
     #[arg(long)]
     pub rating: Option<f64>,
 
-    /// New start date (YYYY-MM-DD)
+    /// New start date in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub date: Option<String>,
 
-    /// New completion date (YYYY-MM-DD)
+    /// New completion date in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub completed_date: Option<String>,
 
-    /// New notes
+    /// New notes about the series (optional)
     #[arg(long)]
     pub notes: Option<String>,
 
-    /// New poster path
+    /// New poster image path. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
     #[arg(long)]
     pub poster: Option<String>,
 }

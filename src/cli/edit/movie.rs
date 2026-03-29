@@ -1,6 +1,31 @@
 //! Movie edit command implementation
 //!
 //! This module handles editing existing movies in the database.
+//! Edit one or more fields of a movie using command-line flags.
+//!
+//! # Examples
+//!
+//! Edit a movie's title and rating:
+//! ```sh
+//! tana edit movie 1 --title "Updated Title" --rating 9.5
+//! ```
+//!
+//! Edit a movie with a new poster image:
+//! ```sh
+//! tana edit movie 1 --title "Updated Title" --rating 9.5 --poster /path/to/new_poster.png
+//! ```
+//!
+//! Update only the director:
+//! ```sh
+//! tana edit movie 1 --director "Steven Spielberg"
+//! ```
+//!
+//! Update multiple fields including a new poster:
+//! ```sh
+//! tana edit movie 1 --title "Inception" --director "Christopher Nolan" --year 2010 --rating 9.0 --poster /path/to/poster.jpg
+//! ```
+//!
+//! Supported image formats for --poster: PNG, JPG, JPEG, WebP, GIF, BMP
 
 use clap::Args;
 use tracing::info;
@@ -10,36 +35,40 @@ use crate::db::queries;
 use crate::error::Result;
 
 /// Arguments for editing a movie
+///
+/// This struct defines all available options for editing an existing movie in the database.
+/// The ID is required, but all other fields are optional. At least one optional field
+/// must be provided to make any changes to the movie.
 #[derive(Args, Debug)]
 pub struct MovieEditArgs {
-    /// ID of the movie to edit
+    /// ID of the movie to edit (required)
     pub id: i32,
 
-    /// New title
+    /// New title for the movie (optional)
     #[arg(long)]
     pub title: Option<String>,
 
-    /// New release year
+    /// New release year (optional)
     #[arg(long)]
     pub year: Option<i32>,
 
-    /// New director
+    /// New director (optional)
     #[arg(long)]
     pub director: Option<String>,
 
-    /// New rating (1-10)
+    /// New rating on a scale of 1-10 (optional)
     #[arg(long)]
     pub rating: Option<f64>,
 
-    /// New watched date (YYYY-MM-DD)
+    /// New watched date in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub date: Option<String>,
 
-    /// New notes
+    /// New notes (optional)
     #[arg(long)]
     pub notes: Option<String>,
 
-    /// New poster path
+    /// New poster image path. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
     #[arg(long)]
     pub poster: Option<String>,
 }

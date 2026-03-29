@@ -5,6 +5,13 @@
 //! various fields (title, author, genre, pages, rating, date) and output in multiple
 //! formats (plain text table, JSON, CSV).
 //!
+//! # Cover Path Display
+//!
+//! All output formats include the cover image path for each book:
+//! - **Plain format**: Cover paths are truncated to fit terminal width for readability
+//! - **JSON format**: Includes `cover_path` field with full path
+//! - **CSV format**: Includes `CoverPath` column with truncated paths
+//!
 //! # Module Structure
 //!
 //! This module is organized as a hub with submodules:
@@ -13,18 +20,24 @@
 //!
 //! # Examples
 //!
-//! Filter books by author and sort by rating in descending order:
+//! Show all books sorted by rating in descending order:
 //! ```ignore
-//! let args = BooksShowArgs {
-//!     author: Some("Tolkien".to_string()),
-//!     genre: None,
-//!     min_rating: None,
-//!     sort: Some("rating".to_string()),
-//!     order: Some("desc".to_string()),
-//!     limit: None,
-//!     format: "plain".to_string(),
-//! };
-//! execute(&db, args)?;
+//! tana show books --sort rating --order desc
+//! ```
+//!
+//! Filter books by author and genre, output as JSON with cover paths:
+//! ```ignore
+//! tana show books --author "J.R.R. Tolkien" --genre "Fantasy" --format json
+//! ```
+//!
+//! Show top 20 highest-rated books with cover paths in plain format:
+//! ```ignore
+//! tana show books --min-rating 8.0 --sort rating --order desc --limit 20
+//! ```
+//!
+//! Export all books to CSV including cover paths for spreadsheet import:
+//! ```ignore
+//! tana show books --format csv
 //! ```
 
 pub mod display;
@@ -46,61 +59,102 @@ pub use display::BookEntry;
 /// This struct represents the command-line arguments for the `show books` command.
 /// It supports filtering by author and genre, applying a minimum rating threshold,
 /// sorting by various fields, and outputting results in different formats.
+/// All output formats include the cover path for visual reference.
 #[derive(Args, Debug)]
 pub struct BooksShowArgs {
-    /// Filter by author name (case-insensitive partial match)
+    /// Filter by author name (optional)
     ///
     /// Filters the book list to only include books by authors whose names contain
-    /// the specified string (case-insensitive).
+    /// the specified string (case-insensitive partial match).
+    ///
+    /// # Example
+    /// ```ignore
+    /// --author "Tolkien"
+    /// ```
     #[arg(long)]
     pub author: Option<String>,
 
-    /// Filter by genre (case-insensitive partial match)
+    /// Filter by genre (optional)
     ///
     /// Filters the book list to only include books with genres that contain
-    /// the specified string (case-insensitive).
+    /// the specified string (case-insensitive partial match).
+    ///
+    /// # Example
+    /// ```ignore
+    /// --genre "Fantasy"
+    /// ```
     #[arg(long)]
     pub genre: Option<String>,
 
-    /// Minimum rating threshold (1-10)
+    /// Minimum rating threshold on scale of 1-10 (optional)
     ///
     /// Filters the book list to only include books with a rating greater than
-    /// or equal to the specified value.
+    /// or equal to the specified value. Useful for finding highly-rated books.
+    ///
+    /// # Example
+    /// ```ignore
+    /// --min-rating 8.5
+    /// ```
     #[arg(long)]
     pub min_rating: Option<f64>,
 
-    /// Sort by field (title, author, genre, pages, rating, date)
+    /// Sort by field: title, author, genre, pages, rating, date (optional, default: title)
     ///
     /// Specifies which field to sort the results by. Valid options are:
     /// - title: Sort alphabetically by book title
     /// - author: Sort alphabetically by author name
     /// - genre: Sort alphabetically by genre
     /// - pages: Sort numerically by page count
-    /// - rating: Sort numerically by rating
-    /// - date: Sort by completion date
+    /// - rating: Sort numerically by rating (highest/lowest based on order)
+    /// - date: Sort by completion date (when the book was finished)
+    ///
+    /// If not specified, defaults to sorting by title.
+    ///
+    /// # Example
+    /// ```ignore
+    /// --sort rating --order desc
+    /// ```
     #[arg(long)]
     pub sort: Option<String>,
 
-    /// Sort order (asc or desc)
+    /// Sort order: asc or desc (optional, default: asc)
     ///
-    /// Specifies the sort direction. Use "asc" for ascending order (default)
-    /// or "desc" for descending order. Only used if `sort` is specified.
+    /// Specifies the sort direction when a sort field is provided.
+    /// - asc: Ascending order (A-Z, 0-9, oldest-newest)
+    /// - desc: Descending order (Z-A, 9-0, newest-oldest)
+    ///
+    /// Only used if `sort` is specified.
+    ///
+    /// # Example
+    /// ```ignore
+    /// --order desc
+    /// ```
     #[arg(long)]
     pub order: Option<String>,
 
-    /// Limit number of results
+    /// Limit number of results shown (optional)
     ///
     /// If specified, limits the output to the first N results after filtering
-    /// and sorting.
+    /// and sorting. Useful for "top N" queries.
+    ///
+    /// # Example
+    /// ```ignore
+    /// --limit 10
+    /// ```
     #[arg(long)]
     pub limit: Option<i32>,
 
-    /// Output format (plain, json, csv)
+    /// Output format: plain, json, or csv (default: plain). All formats include cover path.
     ///
     /// Specifies the output format for displaying books:
-    /// - plain: Human-readable table format (default)
-    /// - json: Machine-readable JSON format with full details
-    /// - csv: Comma-separated values for import into spreadsheets
+    /// - **plain**: Human-readable table format with cover paths truncated to fit terminal width (default)
+    /// - **json**: Machine-readable JSON format with complete details including `cover_path` field
+    /// - **csv**: Comma-separated values with `CoverPath` column for spreadsheet import
+    ///
+    /// # Example
+    /// ```ignore
+    /// --format json
+    /// ```
     #[arg(long, default_value = "plain")]
     pub format: String,
 }
@@ -117,7 +171,7 @@ pub struct BooksShowArgs {
 /// 4. Apply minimum rating filter (if specified)
 /// 5. Sort by specified field and order (if specified)
 /// 6. Apply result limit (if specified)
-/// 7. Format and display output according to the requested format
+/// 7. Format and display output according to the requested format, including cover paths
 ///
 /// # Arguments
 ///

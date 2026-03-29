@@ -1,6 +1,31 @@
 //! Book edit command implementation
 //!
 //! This module handles editing existing books in the database.
+//! Edit one or more fields of a book using command-line flags.
+//!
+//! # Examples
+//!
+//! Update a book's rating and genre:
+//! ```sh
+//! tana edit book 3 --rating 8.5 --genre "Science Fiction"
+//! ```
+//!
+//! Edit a book with a new cover image:
+//! ```sh
+//! tana edit book 3 --title "Updated Title" --rating 9.0 --cover /path/to/new_cover.png
+//! ```
+//!
+//! Update book completion information:
+//! ```sh
+//! tana edit book 3 --date "2024-01-15" --rating 8.5 --cover /path/to/cover.jpg
+//! ```
+//!
+//! Update multiple fields including cover:
+//! ```sh
+//! tana edit book 3 --author "New Author" --pages 350 --rating 7.5 --cover /path/to/cover.png
+//! ```
+//!
+//! Supported image formats for --cover: PNG, JPG, JPEG, WebP, GIF, BMP
 
 use clap::Args;
 use tracing::info;
@@ -10,48 +35,51 @@ use crate::db::queries;
 use crate::error::Result;
 
 /// Arguments for editing a book
+///
+/// All fields are optional except for the book ID. At least one optional field
+/// must be provided to make any changes to the book.
 #[derive(Args, Debug)]
 pub struct BookEditArgs {
-    /// ID of the book to edit
+    /// ID of the book to edit (required)
     pub id: i32,
 
-    /// New title
+    /// New title for the book (optional)
     #[arg(long)]
     pub title: Option<String>,
 
-    /// New author
+    /// New author of the book (optional)
     #[arg(long)]
     pub author: Option<String>,
 
-    /// New ISBN
+    /// New ISBN for the book (optional)
     #[arg(long)]
     pub isbn: Option<String>,
 
-    /// New genre
+    /// New genre of the book (optional)
     #[arg(long)]
     pub genre: Option<String>,
 
-    /// New page count
+    /// New page count for the book (optional)
     #[arg(long)]
     pub pages: Option<i32>,
 
-    /// New rating (1-10)
+    /// New rating on a scale of 1-10 (optional)
     #[arg(long)]
     pub rating: Option<f64>,
 
-    /// New start date (YYYY-MM-DD)
+    /// New start date in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub started_date: Option<String>,
 
-    /// New completion date (YYYY-MM-DD)
+    /// New completion date in YYYY-MM-DD format (optional)
     #[arg(long)]
     pub date: Option<String>,
 
-    /// New notes
+    /// New notes about the book (optional)
     #[arg(long)]
     pub notes: Option<String>,
 
-    /// New cover path
+    /// New cover image path. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
     #[arg(long)]
     pub cover: Option<String>,
 }
