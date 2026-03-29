@@ -107,7 +107,9 @@ pub fn execute(ctx: &AppContext, args: MovieEditArgs) -> Result<()> {
         movie.notes = Some(notes);
     }
     if let Some(poster) = args.poster {
-        let poster_path = crate::image::validate_image_path(&poster)?;
+        let images_dir = ctx.config().images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let poster_path = crate::image::copy_image_file(&poster, &images_dir_str)?;
         movie.poster_path = Some(poster_path);
     }
 

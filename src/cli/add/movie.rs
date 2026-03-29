@@ -72,9 +72,11 @@ pub fn execute(ctx: &AppContext, args: MovieArgs) -> Result<()> {
     // Create movie entry
     let mut movie = Movie::new(args.title.clone(), args.date);
 
-    // Validate and set poster path if provided
+    // Copy and set poster path if provided
     if let Some(poster) = args.poster {
-        let poster_path = crate::image::validate_image_path(&poster)?;
+        let images_dir = ctx.config().images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let poster_path = crate::image::copy_image_file(&poster, &images_dir_str)?;
         movie = movie.with_poster_path(poster_path);
     }
     if let Some(year) = args.year {

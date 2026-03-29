@@ -84,9 +84,11 @@ pub fn execute(ctx: &AppContext, args: BookArgs) -> Result<()> {
     // Create book entry
     let mut book = Book::new(args.title.clone(), args.author, args.date);
 
-    // Validate and set cover path if provided
+    // Copy and set cover path if provided
     if let Some(cover) = args.cover {
-        let cover_path = crate::image::validate_image_path(&cover)?;
+        let images_dir = ctx.config().images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let cover_path = crate::image::copy_image_file(&cover, &images_dir_str)?;
         book = book.with_cover_path(cover_path);
     }
     if let Some(isbn) = args.isbn {
