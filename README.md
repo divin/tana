@@ -1,4 +1,4 @@
-# Tana - Media Tracking CLI Tool
+# 🗄️ Tana - Media Tracking CLI Tool
 
 Tana (Japanese: 棚 for "shelf") is a lightweight Rust CLI tool for tracking movies, TV series, and books you've consumed. Built with SQLite for persistent storage and designed with extensibility in mind for future media types. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
 
