@@ -9,7 +9,7 @@ use super::series::TVSeriesResponse;
 use serde::{Deserialize, Serialize};
 
 /// Search result containing a media item (one of the three types)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type")]
 pub enum SearchResponse {
     #[serde(rename = "movie")]

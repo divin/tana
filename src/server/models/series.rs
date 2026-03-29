@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// TV Series response for GET requests
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TVSeriesResponse {
     pub id: i32,
     pub title: String,
@@ -23,7 +23,7 @@ pub struct TVSeriesResponse {
 }
 
 /// TV Series request for POST/PUT operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct TVSeriesRequest {
     pub title: String,
     #[serde(default)]

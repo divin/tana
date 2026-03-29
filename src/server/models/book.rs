@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Book response for GET requests
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct BookResponse {
     pub id: i32,
     pub title: String,
@@ -22,7 +22,7 @@ pub struct BookResponse {
 }
 
 /// Book request for POST/PUT operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct BookRequest {
     pub title: String,
     pub author: String,

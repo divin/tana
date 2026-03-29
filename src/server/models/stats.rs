@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Statistics response showing counts for each media type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct StatsResponse {
     pub total_movies: i64,
     pub total_series: i64,

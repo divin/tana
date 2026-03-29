@@ -12,6 +12,14 @@ use axum::{Json, extract::State};
 use tracing::{debug, error};
 
 /// Get statistics about all media
+#[utoipa::path(
+    get,
+    path = "/api/stats",
+    responses(
+        (status = 200, description = "Statistics retrieved successfully", body = StatsResponse),
+    ),
+    tag = "Statistics"
+)]
 pub async fn stats_handler(State(state): State<AppState>) -> Result<Json<StatsResponse>, ApiError> {
     debug!("Fetching statistics");
 

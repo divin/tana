@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Movie response for GET requests
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct MovieResponse {
     pub id: i32,
     pub title: String,
@@ -19,7 +19,7 @@ pub struct MovieResponse {
 }
 
 /// Movie request for POST/PUT operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct MovieRequest {
     pub title: String,
     #[serde(default)]

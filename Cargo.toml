@@ -6,13 +6,16 @@ edition = "2024"
 [dependencies]
 axum = "0.8.8"
 toml = "1.1.0"
+utoipa = "5.4.0"
 chrono = "0.4.44"
 anyhow = "1.0.102"
 tracing = "0.1.44"
 thiserror = "2.0.18"
+utoipa-axum = "0.2.0"
 serde_json = "1.0.149"
 tracing-subscriber = "0.3.23"
-tokio = { version = "1.43", features = ["rt", "net", "macros"] }
 clap = { version = "4.6.0", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+tokio = { version = "1.43", features = ["rt", "net", "macros"] }

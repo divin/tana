@@ -18,6 +18,14 @@ use axum::{
 use tracing::{debug, error};
 
 /// List all books
+#[utoipa::path(
+    get,
+    path = "/api/books",
+    responses(
+        (status = 200, description = "List of all books", body = Vec<BookResponse>),
+    ),
+    tag = "Books"
+)]
 pub async fn list_books(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BookResponse>>, ApiError> {
@@ -38,6 +46,18 @@ pub async fn list_books(
 }
 
 /// Get a single book by ID
+#[utoipa::path(
+    get,
+    path = "/api/books/{id}",
+    responses(
+        (status = 200, description = "Book found", body = BookResponse),
+        (status = 404, description = "Book not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Book ID")
+    ),
+    tag = "Books"
+)]
 pub async fn get_book(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -60,6 +80,16 @@ pub async fn get_book(
 }
 
 /// Create a new book
+#[utoipa::path(
+    post,
+    path = "/api/books",
+    request_body = BookRequest,
+    responses(
+        (status = 201, description = "Book created successfully", body = BookResponse),
+        (status = 400, description = "Invalid request body"),
+    ),
+    tag = "Books"
+)]
 pub async fn create_book(
     State(state): State<AppState>,
     Json(req): Json<BookRequest>,
@@ -85,6 +115,19 @@ pub async fn create_book(
 }
 
 /// Update an existing book
+#[utoipa::path(
+    put,
+    path = "/api/books/{id}",
+    request_body = BookRequest,
+    responses(
+        (status = 200, description = "Book updated successfully", body = BookResponse),
+        (status = 404, description = "Book not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Book ID")
+    ),
+    tag = "Books"
+)]
 pub async fn update_book(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -117,6 +160,18 @@ pub async fn update_book(
 }
 
 /// Delete a book
+#[utoipa::path(
+    delete,
+    path = "/api/books/{id}",
+    responses(
+        (status = 204, description = "Book deleted successfully"),
+        (status = 404, description = "Book not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Book ID")
+    ),
+    tag = "Books"
+)]
 pub async fn delete_book(
     State(state): State<AppState>,
     Path(id): Path<i32>,

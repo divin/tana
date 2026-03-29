@@ -23,6 +23,17 @@ pub struct SearchParams {
 }
 
 /// Search across all media types
+#[utoipa::path(
+    get,
+    path = "/api/search",
+    params(
+        ("q" = String, Query, description = "Search query string to match against titles, directors, authors, and notes")
+    ),
+    responses(
+        (status = 200, description = "Search results", body = Vec<SearchResponse>),
+    ),
+    tag = "Search"
+)]
 pub async fn search_handler(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,

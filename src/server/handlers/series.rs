@@ -18,6 +18,14 @@ use axum::{
 use tracing::{debug, error};
 
 /// List all TV series
+#[utoipa::path(
+    get,
+    path = "/api/series",
+    responses(
+        (status = 200, description = "List of all TV series", body = Vec<TVSeriesResponse>),
+    ),
+    tag = "TV Series"
+)]
 pub async fn list_series(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<TVSeriesResponse>>, ApiError> {
@@ -38,6 +46,18 @@ pub async fn list_series(
 }
 
 /// Get a single TV series by ID
+#[utoipa::path(
+    get,
+    path = "/api/series/{id}",
+    responses(
+        (status = 200, description = "TV series found", body = TVSeriesResponse),
+        (status = 404, description = "TV series not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "TV Series ID")
+    ),
+    tag = "TV Series"
+)]
 pub async fn get_series(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -60,6 +80,16 @@ pub async fn get_series(
 }
 
 /// Create a new TV series
+#[utoipa::path(
+    post,
+    path = "/api/series",
+    request_body = TVSeriesRequest,
+    responses(
+        (status = 201, description = "TV series created successfully", body = TVSeriesResponse),
+        (status = 400, description = "Invalid request body"),
+    ),
+    tag = "TV Series"
+)]
 pub async fn create_series(
     State(state): State<AppState>,
     Json(req): Json<TVSeriesRequest>,
@@ -85,6 +115,19 @@ pub async fn create_series(
 }
 
 /// Update an existing TV series
+#[utoipa::path(
+    put,
+    path = "/api/series/{id}",
+    request_body = TVSeriesRequest,
+    responses(
+        (status = 200, description = "TV series updated successfully", body = TVSeriesResponse),
+        (status = 404, description = "TV series not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "TV Series ID")
+    ),
+    tag = "TV Series"
+)]
 pub async fn update_series(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -117,6 +160,18 @@ pub async fn update_series(
 }
 
 /// Delete a TV series
+#[utoipa::path(
+    delete,
+    path = "/api/series/{id}",
+    responses(
+        (status = 204, description = "TV series deleted successfully"),
+        (status = 404, description = "TV series not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "TV Series ID")
+    ),
+    tag = "TV Series"
+)]
 pub async fn delete_series(
     State(state): State<AppState>,
     Path(id): Path<i32>,

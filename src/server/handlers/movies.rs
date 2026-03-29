@@ -18,6 +18,14 @@ use axum::{
 use tracing::{debug, error};
 
 /// List all movies
+#[utoipa::path(
+    get,
+    path = "/api/movies",
+    responses(
+        (status = 200, description = "List of all movies", body = Vec<MovieResponse>),
+    ),
+    tag = "Movies"
+)]
 pub async fn list_movies(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MovieResponse>>, ApiError> {
@@ -38,6 +46,18 @@ pub async fn list_movies(
 }
 
 /// Get a single movie by ID
+#[utoipa::path(
+    get,
+    path = "/api/movies/{id}",
+    responses(
+        (status = 200, description = "Movie found", body = MovieResponse),
+        (status = 404, description = "Movie not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Movie ID")
+    ),
+    tag = "Movies"
+)]
 pub async fn get_movie(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -60,6 +80,16 @@ pub async fn get_movie(
 }
 
 /// Create a new movie
+#[utoipa::path(
+    post,
+    path = "/api/movies",
+    request_body = MovieRequest,
+    responses(
+        (status = 201, description = "Movie created successfully", body = MovieResponse),
+        (status = 400, description = "Invalid request body"),
+    ),
+    tag = "Movies"
+)]
 pub async fn create_movie(
     State(state): State<AppState>,
     Json(req): Json<MovieRequest>,
@@ -85,6 +115,19 @@ pub async fn create_movie(
 }
 
 /// Update an existing movie
+#[utoipa::path(
+    put,
+    path = "/api/movies/{id}",
+    request_body = MovieRequest,
+    responses(
+        (status = 200, description = "Movie updated successfully", body = MovieResponse),
+        (status = 404, description = "Movie not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Movie ID")
+    ),
+    tag = "Movies"
+)]
 pub async fn update_movie(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -117,6 +160,18 @@ pub async fn update_movie(
 }
 
 /// Delete a movie
+#[utoipa::path(
+    delete,
+    path = "/api/movies/{id}",
+    responses(
+        (status = 204, description = "Movie deleted successfully"),
+        (status = 404, description = "Movie not found"),
+    ),
+    params(
+        ("id" = i32, Path, description = "Movie ID")
+    ),
+    tag = "Movies"
+)]
 pub async fn delete_movie(
     State(state): State<AppState>,
     Path(id): Path<i32>,

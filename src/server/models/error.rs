@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Error response for API errors
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
     pub status: u16,
