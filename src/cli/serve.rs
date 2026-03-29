@@ -11,11 +11,11 @@ use crate::server;
 #[derive(Args, Debug)]
 pub struct ServeCommand {
     /// Host address to bind to
-    #[arg(short, long, default_value = "127.0.0.1")]
+    #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
 
     /// Port number to listen on
-    #[arg(short, long, default_value = "8080")]
+    #[arg(long, default_value = "8080")]
     pub port: u16,
 }
 
