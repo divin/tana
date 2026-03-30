@@ -10,7 +10,7 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
 use axum::routing::get;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -51,7 +51,13 @@ impl AppState {
 /// # Returns
 /// A configured CorsLayer with explicit origin allowlist and credentials support
 fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
-    let mut cors = CorsLayer::new()
+    // Parse origins into HeaderValues
+    let allow_origins = origins
+        .into_iter()
+        .filter_map(|o| o.parse::<HeaderValue>().ok())
+        .collect::<Vec<_>>();
+
+    CorsLayer::new()
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -60,17 +66,9 @@ fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
             Method::OPTIONS,
         ])
         .allow_headers([CONTENT_TYPE, ACCEPT])
-        .allow_credentials(true)
-        .max_age(std::time::Duration::from_secs(3600));
-
-    // Add origins explicitly
-    for origin in origins {
-        if let Ok(parsed) = origin.parse::<HeaderValue>() {
-            cors = cors.allow_origin(parsed);
-        }
-    }
-
-    cors
+        .allow_origin(AllowOrigin::list(allow_origins))
+        .expose_headers([CONTENT_TYPE])
+        .max_age(std::time::Duration::from_secs(3600))
 }
 
 /// OpenAPI documentation for the Tana API

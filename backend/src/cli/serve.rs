@@ -4,6 +4,7 @@ use clap::Args;
 use tracing::info;
 
 use crate::cli::context::AppContext;
+use crate::db::Database;
 use crate::error::Result;
 use crate::server;
 
@@ -27,12 +28,19 @@ impl ServeCommand {
         // Get the database path from config
         let db_path = ctx.config().database_path().to_path_buf();
 
+        // Initialize the database once at startup
+        // This ensures the database schema is created and logs "Database initialized successfully" once
+        let _db = Database::open(&db_path)?;
+        drop(_db); // Explicitly drop the database connection to ensure it's closed before the server starts
+
         // Create a tokio runtime to run the async server
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(crate::error::TanaError::Io)?;
 
+        // Pass the path to the server - handlers will open from this path
+        // The database is already initialized, so reopening will be quick
         rt.block_on(server::run(db_path, self.host.clone(), self.port))
     }
 }

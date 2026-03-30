@@ -48,6 +48,9 @@ impl Database {
         let path = path.as_ref();
         debug!("Opening database at {:?}", path);
 
+        // Check if this is the first initialization (database file doesn't exist yet)
+        let is_new_db = !path.exists();
+
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -64,7 +67,12 @@ impl Database {
         // Run migrations
         db.run_migrations()?;
 
-        info!("Database initialized successfully at {:?}", path);
+        // Only log initialization message on first open (when database is created)
+        // Subsequent opens will only have a debug log entry
+        if is_new_db {
+            info!("Database initialized successfully at {:?}", path);
+        }
+
         Ok(db)
     }
 
