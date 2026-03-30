@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Manage your book collection in Tana" />
+        <title>Books - Tana Media Tracker</title>
+
+        <!-- Pico CSS v2 -->
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+        />
+
+        <!-- Custom styles -->
+        <link rel="stylesheet" href="../css/style.css" />
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <h1>🎬 Tana</h1>
+                </div>
+                <ul class="nav-menu">
+                    <li>
+                        <a href="../index.html" class="nav-link">Dashboard</a>
+                    </li>
+                    <li>
+                        <a href="movies.html" class="nav-link">Movies</a>
+                    </li>
+                    <li>
+                        <a href="series.html" class="nav-link">Series</a>
+                    </li>
+                    <li>
+                        <a href="books.html" class="nav-link active">Books</a>
+                    </li>
+                    <li>
+                        <a href="search.html" class="nav-link">Search</a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="container">
+            <div class="page-header">
+                <h2>Books</h2>
+                <p>Track your reading collection</p>
+            </div>
+
+            <!-- Controls Section -->
+            <section class="controls-section">
+                <div class="search-and-filters">
+                    <input
+                        type="search"
+                        id="books-search"
+                        placeholder="Search by title or author..."
+                        class="search-input"
+                        aria-label="Search books"
+                    />
+                    <div class="filter-group">
+                        <select id="genre-filter" class="filter-select">
+                            <option value="">All Genres</option>
+                        </select>
+                        <select id="sort-by" class="sort-select">
+                            <option value="recent">Recently Added</option>
+                            <option value="title">Title A-Z</option>
+                            <option value="author">Author A-Z</option>
+                            <option value="year">Year Newest</option>
+                            <option value="rating">Highest Rated</option>
+                        </select>
+                    </div>
+                </div>
+                <button
+                    id="btn-add-book"
+                    class="btn-primary"
+                    aria-label="Add new book"
+                >
+                    ➕ Add Book
+                </button>
+            </section>
+
+            <!-- Books Grid -->
+            <section id="books-container" class="media-grid">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading books...</p>
+                </div>
+            </section>
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state" style="display: none">
+                <div class="empty-icon">📚</div>
+                <h3>No books yet</h3>
+                <p>Start by adding your first book to your collection.</p>
+                <button id="btn-add-book-empty" class="btn-primary">
+                    ➕ Add Your First Book
+                </button>
+            </div>
+        </main>
+
+        <!-- Modal for Book Form -->
+        <dialog id="modal-book">
+            <article>
+                <header>
+                    <button
+                        aria-label="Close modal"
+                        rel="prev"
+                        onclick="document.getElementById('modal-book').close()"
+                    ></button>
+                    <h3 id="modal-book-title">Add Book</h3>
+                </header>
+                <form id="form-book">
+                    <div class="form-grid">
+                        <div>
+                            <label for="book-title"
+                                >Title <span class="required">*</span></label
+                            >
+                            <input
+                                id="book-title"
+                                name="title"
+                                type="text"
+                                placeholder="Enter book title"
+                                required
+                                aria-required="true"
+                            />
+                        </div>
+                        <div>
+                            <label for="book-author"
+                                >Author <span class="required">*</span></label
+                            >
+                            <input
+                                id="book-author"
+                                name="author"
+                                type="text"
+                                placeholder="Author name"
+                                required
+                                aria-required="true"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div>
+                            <label for="book-year">Publication Year</label>
+                            <input
+                                id="book-year"
+                                name="year"
+                                type="number"
+                                min="1000"
+                                max="2100"
+                                placeholder="e.g., 2023"
+                            />
+                        </div>
+                        <div>
+                            <label for="book-genre">Genre</label>
+                            <input
+                                id="book-genre"
+                                name="genre"
+                                type="text"
+                                placeholder="e.g., Science Fiction"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div>
+                            <label for="book-rating">Rating (0-10)</label>
+                            <input
+                                id="book-rating"
+                                name="rating"
+                                type="number"
+                                min="0"
+                                max="10"
+                                step="0.5"
+                                placeholder="e.g., 8.5"
+                            />
+                        </div>
+                        <div>
+                            <label for="book-status">Status</label>
+                            <select id="book-status" name="status">
+                                <option value="read">Read</option>
+                                <option value="reading">Currently Reading</option>
+                                <option value="want-to-read">Want to Read</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div>
+                            <label for="book-isbn">ISBN</label>
+                            <input
+                                id="book-isbn"
+                                name="isbn"
+                                type="text"
+                                placeholder="Optional ISBN"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="book-cover">Cover URL</label>
+                        <input
+                            id="book-cover"
+                            name="cover_url"
+                            type="url"
+                            placeholder="https://example.com/cover.jpg"
+                        />
+                    </div>
+
+                    <div>
+                        <label for="book-notes">Notes</label>
+                        <textarea
+                            id="book-notes"
+                            name="notes"
+                            placeholder="Your thoughts, favorite quotes, etc."
+                            rows="4"
+                        ></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button
+                            type="button"
+                            class="secondary"
+                            onclick="document.getElementById('modal-book').close()"
+                        >
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn-primary">
+                            Save Book
+                        </button>
+                    </div>
+                </form>
+            </article>
+        </dialog>
+
+        <!-- Confirmation Dialog -->
+        <dialog id="dialog-confirm-delete">
+            <article>
+                <h3>Delete Book</h3>
+                <p id="delete-message">
+                    Are you sure you want to delete this book? This action
+                    cannot be undone.
+                </p>
+                <footer>
+                    <button
+                        class="secondary"
+                        onclick="document.getElementById('dialog-confirm-delete').close()"
+                    >
+                        Cancel
+                    </button>
+                    <button id="confirm-delete-btn" class="btn-danger">
+                        Delete
+                    </button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Alert container -->
+        <div id="alert-container" class="alert-container"></div>
+
+        <footer class="footer">
+            <p>&copy; 2024 Tana - Media Tracker</p>
+        </footer>
+
+        <!-- Scripts -->
+        <script src="../js/utils.js"></script>
+        <script src="../js/api-client.js"></script>
+        <script src="../js/app.js"></script>
+        <script src="../js/books.js"></script>
+    </body>
+</html>

@@ -23,12 +23,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
 
       - name: Run tests
+        working-directory: backend
         run: cargo test --lib --verbose
 
       - name: Check formatting
+        working-directory: backend
         run: cargo fmt -- --check
 
       - name: Run clippy
+        working-directory: backend
         run: cargo clippy --all-targets -- -D warnings
