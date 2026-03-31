@@ -32,17 +32,23 @@ pub use routes::*;
 /// * `db_path` - Path to the SQLite database file
 /// * `host` - Host address to bind to (e.g., "127.0.0.1")
 /// * `port` - Port number to listen on
+/// * `cors_origins` - List of allowed CORS origins
 ///
 /// # Returns
 /// Result indicating success or error
-pub async fn run(db_path: PathBuf, host: String, port: u16) -> Result<()> {
+pub async fn run(
+    db_path: PathBuf,
+    host: String,
+    port: u16,
+    cors_origins: Vec<String>,
+) -> Result<()> {
     let addr = format!("{}:{}", host, port);
     let socket_addr: std::net::SocketAddr = addr.parse().map_err(|_| {
         crate::error::TanaError::InvalidInput(format!("Invalid host:port: {}", addr))
     })?;
 
-    // Build the router with database path
-    let app = routes::create_router(db_path);
+    // Build the router with database path and CORS origins
+    let app = routes::create_router(db_path, cors_origins);
 
     // Create a TCP listener
     let listener = tokio::net::TcpListener::bind(&socket_addr)

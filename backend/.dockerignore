@@ -1,0 +1,35 @@
+# Build artifacts and dependencies
+target/
+Cargo.lock
+
+# Version control
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Documentation
+docs/
+README.md
+PLAN.md
+PROMPT.md
+
+# Licenses
+LICENSE-*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tests
+tests/
+
+# Development files
+.env
+.env.local
+debug/

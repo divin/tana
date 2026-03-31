@@ -28,6 +28,14 @@ impl ServeCommand {
         // Get the database path from config
         let db_path = ctx.config().database_path().to_path_buf();
 
+        // Get CORS origins from config with defaults
+        let cors_origins = ctx.config().server.cors_origins.clone().unwrap_or_else(|| {
+            vec![
+                "http://localhost:3000".to_string(),
+                "http://localhost:8080".to_string(),
+            ]
+        });
+
         // Initialize the database once at startup
         // This ensures the database schema is created and logs "Database initialized successfully" once
         let _db = Database::open(&db_path)?;
@@ -41,7 +49,12 @@ impl ServeCommand {
 
         // Pass the path to the server - handlers will open from this path
         // The database is already initialized, so reopening will be quick
-        rt.block_on(server::run(db_path, self.host.clone(), self.port))
+        rt.block_on(server::run(
+            db_path,
+            self.host.clone(),
+            self.port,
+            cors_origins,
+        ))
     }
 }
 

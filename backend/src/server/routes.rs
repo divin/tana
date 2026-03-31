@@ -129,8 +129,12 @@ pub struct ApiDoc;
 /// Sets up all routes with shared application state.
 /// Routes are mounted under /api path.
 /// Swagger UI is available at /api/docs with OpenAPI JSON at /api/docs/openapi.json
-/// CORS is configured with default origins (localhost:3000 and localhost:8080)
-pub fn create_router(db_path: PathBuf) -> Router {
+/// CORS is configured with the provided origins.
+///
+/// # Arguments
+/// * `db_path` - Path to the SQLite database file
+/// * `cors_origins` - List of allowed CORS origins
+pub fn create_router(db_path: PathBuf, cors_origins: Vec<String>) -> Router {
     let state = AppState::new(db_path);
 
     // Build the API routes with shared state
@@ -174,11 +178,7 @@ pub fn create_router(db_path: PathBuf) -> Router {
         .route("/search", get(handlers::search_handler))
         .with_state(state);
 
-    // Create CORS layer with default origins
-    let cors_origins = vec![
-        "http://localhost:3000".to_string(),
-        "http://localhost:8080".to_string(),
-    ];
+    // Create CORS layer with provided origins
     let cors_layer = create_cors_layer(cors_origins);
 
     // Build the main router with the API routes nested under /api
@@ -205,7 +205,11 @@ mod tests {
     fn test_router_creation() {
         // Test that the router can be created with a valid path
         let path = PathBuf::from("/tmp/test.db");
-        let _router = create_router(path);
+        let cors_origins = vec![
+            "http://localhost:3000".to_string(),
+            "http://localhost:8080".to_string(),
+        ];
+        let _router = create_router(path, cors_origins);
         // If we get here without panicking, the router was created successfully
     }
 
@@ -238,7 +242,11 @@ mod tests {
     fn test_create_router_includes_cors() {
         // Test that the router can be created and includes CORS configuration
         let path = PathBuf::from("/tmp/test.db");
-        let _router = create_router(path);
+        let cors_origins = vec![
+            "http://localhost:3000".to_string(),
+            "http://localhost:8080".to_string(),
+        ];
+        let _router = create_router(path, cors_origins);
         // If we get here without panicking, the router with CORS was created successfully
     }
 }
