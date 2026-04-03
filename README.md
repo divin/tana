@@ -2,6 +2,14 @@
 
 Tana (Japanese: 棚 for "shelf") is a lightweight Rust CLI tool for tracking movies, TV series, and books you've consumed. Built with SQLite for persistent storage and designed with extensibility in mind for future media types. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
 
+## 🎯 CLI-First Design
+
+Tana is designed with a **CLI-first philosophy**. The command-line interface is the primary way to interact with your media library, offering full power and flexibility. The web interface is an optional companion that provides a visual, browser-based way to manage your collection. Whether you prefer the terminal or the browser, Tana adapts to your workflow.
+
+- **Lightweight CLI**: Fast, scriptable, and perfect for automation
+- **Optional Web UI**: Browse and manage your media with a modern interface
+- **Your Choice**: Use the CLI, web interface, or both—it's up to you
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -30,6 +38,192 @@ tana edit movie 1 --rating 9.5
 For more detailed commands and options, run:
 ```bash
 tana --help
+```
+
+## 📸 Screenshots
+
+Get a glimpse of Tana's web interface:
+
+### Dashboard
+![Dashboard Overview](assets/dashboard.png)
+View your entire media collection at a glance with statistics and quick access.
+
+### Movies Library
+![Movies View](assets/movies.png)
+Browse and organize your movie collection with filters and sorting options.
+
+### Search & Filter
+![Search & Filter](assets/search.png)
+Quickly find what you're looking for with powerful search and filtering capabilities.
+
+### Item Details
+![Item Details](assets/details.png)
+View comprehensive information about each media item including ratings and descriptions.
+
+### Edit Entry
+![Edit Entry](assets/edit.png)
+Easily update media details with an intuitive editing interface.
+
+## 🐳 Docker Deployment
+
+### Two Docker Compose Configurations
+
+Tana includes two Docker Compose files for different use cases:
+
+- **`docker-compose.yml`** (Production): Uses pre-built images from GitHub Container Registry (GHCR). Recommended for running released versions.
+- **`docker-compose.dev.yml`** (Development): Builds images locally from source code. Use this if you're developing or running from the latest code.
+
+### Quick Start with Released Images (Production)
+
+For the easiest way to run a released version of Tana:
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Start the application
+docker-compose up
+```
+
+This command will:
+- Pull pre-built Docker images from GitHub Container Registry
+- Start the API server on `http://localhost:8080`
+- Start the web interface on `http://localhost:3000`
+- Persist your data locally
+
+### Quick Start with Local Build (Development)
+
+To build and run from the latest source code:
+
+```bash
+docker-compose -f docker-compose.dev.yml up
+```
+
+This command will:
+- Build optimized Docker images locally from source code
+- Start the API server on `http://localhost:8080`
+- Start the web interface on `http://localhost:3000`
+- Create and persist data locally
+
+### Access the Application
+
+Once the services are running:
+- **Web Interface**: http://localhost:3000
+- **API Server**: http://localhost:8080/api
+- **API Documentation**: http://localhost:8080/api/docs (Swagger UI)
+
+### Data Persistence
+
+Both the database and media images are automatically persisted in a Docker named volume called `tana-data`. This means your data will survive container restarts and updates.
+
+To view the current data location:
+```bash
+docker volume inspect tana-data
+```
+
+To completely remove all data:
+```bash
+docker-compose down -v
+```
+
+### Build Individual Services
+
+If you want to build the Docker images separately:
+
+```bash
+# Build backend API
+docker build -t tana-api backend/
+
+# Build frontend web interface
+docker build -t tana-web frontend/
+
+# Run backend
+docker run -p 8080:8080 -v tana-data:/home/tana/.local/share/tana tana-api
+
+# Run frontend (in another terminal)
+docker run -p 3000:3000 tana-web
+```
+
+### Environment Variables
+
+Both Docker Compose configurations support the following environment variables:
+
+**Available Variables:**
+- `TANA_VERSION`: Version of Docker images to use (default: `latest`). Can be a specific release like `v0.1.0` or `latest`.
+- `RUST_LOG`: Logging level for the backend API (default: `info`, options: `trace`, `debug`, `info`, `warn`, `error`)
+
+**Configuration:**
+
+A `.env.example` file is provided as a template. To customize settings:
+
+```bash
+cp .env.example .env
+# Edit .env with your desired values
+docker-compose up
+```
+
+Example `.env` file:
+```bash
+TANA_VERSION=latest
+RUST_LOG=info
+```
+
+To pin a specific release version:
+```bash
+TANA_VERSION=v0.1.0
+RUST_LOG=debug
+```
+
+### Health Checks
+
+Both services include health checks that run every 10 seconds. You can view the health status with:
+
+```bash
+docker-compose ps
+```
+
+Look for the `(healthy)` or `(unhealthy)` status indicators.
+
+### Stop and Clean Up
+
+```bash
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (delete all data)
+docker-compose down -v
+
+# Remove images
+docker-compose down --rmi all
+```
+
+### Troubleshooting Docker
+
+**API service won't start:**
+- Check logs: `docker-compose logs api`
+- Ensure port 8080 is available
+- Verify the database volume has write permissions
+
+**Web interface won't load:**
+- Check logs: `docker-compose logs web`
+- Ensure port 3000 is available
+- Verify the API service is running and healthy
+
+**Permission denied on data volume:**
+```bash
+docker-compose down -v
+docker-compose up
+```
+
+**Port already in use:**
+Modify the port mappings in `docker-compose.yml`:
+```yaml
+api:
+  ports:
+    - "8081:8080"  # Map to 8081 instead
+web:
+  ports:
+    - "3001:3000"  # Map to 3001 instead
 ```
 
 ## 🤖 AI Disclaimer
