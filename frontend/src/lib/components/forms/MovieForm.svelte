@@ -149,7 +149,7 @@
             <label for="poster">Poster URL</label>
             <input
                 id="poster"
-                type="url"
+                type="text"
                 bind:value={posterPath}
                 placeholder="https://example.com/poster.jpg"
                 disabled={saving}

@@ -191,7 +191,7 @@
             <label for="cover">Cover URL</label>
             <input
                 id="cover"
-                type="url"
+                type="text"
                 bind:value={coverPath}
                 placeholder="https://example.com/cover.jpg"
                 disabled={saving}
