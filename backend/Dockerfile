@@ -38,8 +38,9 @@ RUN apk add --no-cache \
     curl \
     ca-certificates
 
-# Create non-root user for security best practices
-RUN addgroup -S tana && adduser -S tana -G tana
+# Create non-root user for security best practices with explicit uid/gid
+RUN addgroup -g 1000 tana && \
+    adduser -u 1000 -G tana -s /sbin/nologin -D tana
 
 # Create app directory
 WORKDIR /app
@@ -47,10 +48,15 @@ WORKDIR /app
 # Copy only the compiled binary from builder stage
 COPY --from=builder /app/target/release/tana /app/tana
 
-# Create data directory for persistent storage
+# Create data directory for persistent storage with proper permissions
 RUN mkdir -p /home/tana/.local/share/tana && \
-    chown -R tana:tana /home/tana && \
-    chown -R tana:tana /app
+    chmod 755 /home/tana && \
+    chmod 755 /home/tana/.local && \
+    chmod 755 /home/tana/.local/share && \
+    chmod 755 /home/tana/.local/share/tana && \
+    chown -R 1000:1000 /home/tana && \
+    chown -R 1000:1000 /app && \
+    chmod 755 /app
 
 # Switch to non-root user
 USER tana
