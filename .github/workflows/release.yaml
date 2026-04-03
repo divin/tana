@@ -1,0 +1,211 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION_SHORT=${VERSION#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_short=$VERSION_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/backend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/backend:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/frontend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-release:
+    name: Create Release Notes
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION_SHORT=${VERSION#v}
+
+          # Get previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse)
+          else
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..${VERSION} --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse)
+          fi
+
+          # Escape for multiline output
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+          CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
+
+          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_short=$VERSION_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.changelog.outputs.version }}
+          name: Release ${{ steps.changelog.outputs.version_short }}
+          body: |
+            # 🚀 Tana ${{ steps.changelog.outputs.version_short }}
+
+            ## 📦 Docker Images Available
+
+            New Docker images are now available on GitHub Container Registry:
+
+            **Backend API:**
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/backend:${{ steps.changelog.outputs.version }}
+            ```
+
+            **Frontend Web Interface:**
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/frontend:${{ steps.changelog.outputs.version }}
+            ```
+
+            ## 🚀 Quick Start
+
+            ### Using Docker Compose
+
+            Update your `docker-compose.yml`:
+
+            ```yaml
+            version: '3.8'
+
+            services:
+              backend:
+                image: ${{ env.REGISTRY }}/${{ github.repository }}/backend:${{ steps.changelog.outputs.version }}
+                container_name: tana-api
+                ports:
+                  - "8080:8080"
+                environment:
+                  - RUST_LOG=info
+                volumes:
+                  - ~/.local/share/tana:/home/tana/.local/share/tana
+                networks:
+                  - tana-network
+                healthcheck:
+                  test: ["CMD", "curl", "--connect-timeout", "2", "--max-time", "3", "-f", "http://localhost:8080/api/stats"]
+                  interval: 10s
+                  timeout: 3s
+                  retries: 3
+                  start_period: 10s
+                restart: unless-stopped
+
+              frontend:
+                image: ${{ env.REGISTRY }}/${{ github.repository }}/frontend:${{ steps.changelog.outputs.version }}
+                container_name: tana-web
+                ports:
+                  - "3000:3000"
+                depends_on:
+                  backend:
+                    condition: service_healthy
+                networks:
+                  - tana-network
+                healthcheck:
+                  test: ["CMD", "curl", "--connect-timeout", "2", "--max-time", "3", "-f", "http://localhost:3000/"]
+                  interval: 10s
+                  timeout: 3s
+                  retries: 3
+                  start_period: 5s
+                restart: unless-stopped
+
+            networks:
+              tana-network:
+                driver: bridge
+            ```
+
+            Then run:
+            ```bash
+            docker-compose up
+            ```
+
+            Access at:
+            - **Web Interface**: http://localhost:3000
+            - **API Server**: http://localhost:8080/api
+
+            ## 📝 Changes
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## 🔗 More Information
+
+            - [Repository](https://github.com/${{ github.repository }})
+            - [Backend Image Registry](https://github.com/${{ github.repository }}/pkgs/container/backend)
+            - [Frontend Image Registry](https://github.com/${{ github.repository }}/pkgs/container/frontend)
+
+            ---
+
+            Happy tracking! 📚🎥
+          draft: false
+          prerelease: ${{ contains(steps.changelog.outputs.version, 'alpha') || contains(steps.changelog.outputs.version, 'beta') || contains(steps.changelog.outputs.version, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
