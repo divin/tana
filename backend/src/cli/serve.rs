@@ -82,7 +82,7 @@ mod tests {
 
         assert_eq!(cmd.host, "0.0.0.0");
         assert_eq!(cmd.port, 8080);
-        assert_eq!(cmd.allow_any_origin, false);
+        assert!(!cmd.allow_any_origin);
     }
 
     #[test]
@@ -95,6 +95,6 @@ mod tests {
 
         assert_eq!(cmd.host, "0.0.0.0");
         assert_eq!(cmd.port, 3000);
-        assert_eq!(cmd.allow_any_origin, true);
+        assert!(cmd.allow_any_origin);
     }
 }
