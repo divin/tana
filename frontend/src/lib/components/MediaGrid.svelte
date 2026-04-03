@@ -18,9 +18,9 @@
         const type =
             "watched_date" in media
                 ? "movie"
-                : "started_date" in media
-                  ? "series"
-                  : "book";
+                : "author" in media
+                  ? "book"
+                  : "series";
         return `${type}-${media.id}`;
     }
 
