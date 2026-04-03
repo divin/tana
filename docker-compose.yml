@@ -1,4 +1,10 @@
 services:
+  init-data-dir:
+    image: alpine:latest
+    command: sh -c "mkdir -p /home/tana/.local/share/tana && chown 1000:1000 /home/tana/.local/share/tana && chmod 755 /home/tana/.local/share/tana"
+    volumes:
+      - ~/.local/share/tana:/home/tana/.local/share/tana
+
   backend:
     image: ghcr.io/divin/tana/backend:${TANA_VERSION:-latest}
     container_name: tana-api
@@ -10,6 +16,9 @@ services:
       - ~/.local/share/tana:/home/tana/.local/share/tana
     networks:
       - tana-network
+    depends_on:
+      init-data-dir:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
