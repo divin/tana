@@ -163,6 +163,15 @@ fn is_url(path: &str) -> bool {
     path.starts_with("http://") || path.starts_with("https://")
 }
 
+/// Check if a path is a finalized image filename
+///
+/// A finalized image is just a simple filename (no directory separators,
+/// no URL scheme). This indicates it's an already-processed image that
+/// doesn't need to be reprocessed.
+fn is_finalized_image(path: &str) -> bool {
+    !path.contains('/') && !path.contains('\\') && !path.starts_with("http")
+}
+
 /// Validate image file by checking magic bytes
 ///
 /// # Arguments
@@ -304,6 +313,12 @@ pub fn download_image_from_url(url: &str, dest_dir: &str) -> Result<String> {
 /// - If input is a local path: validates and copies to destination directory
 /// - Returns the final path for storage in the database
 pub fn process_image_input(input: &str, dest_dir: &str) -> Result<String> {
+    // If it's already a finalized image filename, return it as-is
+    if is_finalized_image(input) {
+        return Ok(input.to_string());
+    }
+
+    // Otherwise, process it as a new image (download from URL or copy from file)
     if is_url(input) {
         download_image_from_url(input, dest_dir)
     } else {
