@@ -3,8 +3,14 @@ name: Tests
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/test.yaml"
   pull_request:
     branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/test.yaml"
 
 permissions:
   contents: read
