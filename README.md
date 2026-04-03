@@ -1,14 +1,15 @@
 # 🗄️ Tana - Media Tracking CLI Tool
 
-Tana (Japanese: 棚 for "shelf") is a lightweight Rust CLI tool for tracking movies, TV series, and books you've consumed. Built with SQLite for persistent storage and designed with extensibility in mind for future media types. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
+Tana (Japanese: 棚 for "shelf") is a Rust-powered media tracker featuring a lightweight CLI, REST API server, and modern SvelteKit web dashboard. Built with SQLite for persistent storage and designed with extensibility in mind. Includes containerized deployment with Docker and automated CI/CD via GitHub Actions for testing and GHCR releases. I built it mainly for myself to keep track of my media consumption, but it's open source and contributions are welcome!
 
-## 🎯 CLI-First Design
+## 🎯 Multi-Interface Design
 
-Tana is designed with a **CLI-first philosophy**. The command-line interface is the primary way to interact with your media library, offering full power and flexibility. The web interface is an optional companion that provides a visual, browser-based way to manage your collection. Whether you prefer the terminal or the browser, Tana adapts to your workflow.
+Tana is designed to work seamlessly across multiple interfaces. The command-line interface is the primary way to interact with your media library, offering full power and flexibility. The modern SvelteKit web interface is an optional companion that provides a visual, browser-based way to manage your collection. The REST API enables programmatic access and custom integrations. Whether you prefer the terminal, web browser, or API—Tana adapts to your workflow.
 
 - **Lightweight CLI**: Fast, scriptable, and perfect for automation
-- **Optional Web UI**: Browse and manage your media with a modern interface
-- **Your Choice**: Use the CLI, web interface, or both—it's up to you
+- **Modern Web UI**: Browse and manage your media with a SvelteKit-powered interface
+- **REST API**: Programmatic access for custom integrations and tools
+- **Your Choice**: Use any combination—they all work together seamlessly
 
 ## 🚀 Quick Start
 
@@ -64,6 +65,27 @@ View comprehensive information about each media item including ratings and descr
 ![Edit Entry](assets/edit.png)
 Easily update media details with an intuitive editing interface.
 
+## 🛠️ Technology Stack
+
+Tana is built with modern, production-ready technologies:
+
+**Backend:**
+- **Rust** - Fast, safe, and reliable systems programming
+- **Axum** - Ergonomic and modular web framework
+- **SQLite** - Lightweight, serverless database
+- **Tokio** - Async runtime for high performance
+
+**Frontend:**
+- **SvelteKit** - Modern, full-stack framework with SSR support
+- **Svelte 5** - Reactive, component-driven UI
+- **TypeScript** - Type-safe development
+- **Vite** - Lightning-fast build tool
+
+**DevOps & Deployment:**
+- **Docker & Docker Compose** - Containerized deployment
+- **GitHub Actions** - Automated testing and CI/CD
+- **GitHub Container Registry (GHCR)** - Container image hosting
+
 ## 🐳 Docker Deployment
 
 ### Two Docker Compose Configurations
@@ -109,8 +131,20 @@ This command will:
 
 Once the services are running:
 - **Web Interface**: http://localhost:3000
-- **API Server**: http://localhost:8080/api
-- **API Documentation**: http://localhost:8080/api/docs (Swagger UI)
+- **REST API**: http://localhost:8080/api
+- **API Documentation**: http://localhost:8080/api/docs (Swagger UI with interactive testing)
+- **Health Check**: http://localhost:8080/api/health
+
+### REST API Features
+
+The REST API provides full programmatic access to manage your media library:
+- **CRUD Operations**: Create, read, update, and delete media entries
+- **Search & Filtering**: Query your collection by title, type, rating, and more
+- **Image Management**: Upload and serve media images
+- **Health Monitoring**: Monitor service status and availability
+- **Swagger UI**: Interactive API documentation and testing interface at `/api/docs`
+
+You can use the REST API with tools like `curl`, Postman, or any HTTP client in your preferred programming language.
 
 ### Data Persistence
 
