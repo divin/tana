@@ -2,3 +2,4 @@ target/
 PLAN.md
 PROMPT.md
 .DS_Store
+.env
