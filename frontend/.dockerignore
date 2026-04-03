@@ -1,0 +1,87 @@
+# Dependencies and Package Managers
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
+
+# Build Artifacts
+.svelte-kit/
+build/
+dist/
+.next/
+.vercel/
+.turbo/
+
+# Node/JavaScript specific
+*.tsbuildinfo
+.cache/
+
+# Version Control
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD and GitHub
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# IDE and Editor Files
+.vscode/
+.vscode-test/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+.env.*.local
+.editorconfig
+
+# Documentation
+README.md
+CHANGELOG.md
+PLAN.md
+PROMPT.md
+docs/
+
+# Licenses
+LICENSE*
+COPYING*
+
+# Environment Files
+.env
+.env.example
+
+# Logs
+*.log
+logs/
+debug/
+
+# Testing and Coverage
+coverage/
+.nyc_output/
+__tests__/
+test/
+*.test.ts
+*.test.js
+vitest.config.ts
+vitest.config.js
+playwright.config.ts
+playwright.config.js
+.test-results/
+e2e/
+
+# OS and Temporary Files
+.DS_Store
+Thumbs.db
+*.tmp
+tmp/
+temp/
+
+# Development Tools
+.direnv/
+.envrc

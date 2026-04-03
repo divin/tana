@@ -1,0 +1,88 @@
+/* Tana Theme - Centralized Color System */
+/* Dark theme with greyscale and green accents */
+
+:root {
+    /* ===== BASE COLORS ===== */
+
+    /* Background Colors */
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #2d3748;
+    --bg-navbar: #1a1f2e;
+
+    /* Text Colors */
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    /* Border Colors */
+    --border-color: #334155;
+    --border-color-light: #475569;
+
+    /* ===== ACCENT COLORS (Green Theme) ===== */
+    --accent-primary: #10b981;
+    --accent-primary-dark: #059669;
+    --accent-primary-light: #d1fae5;
+
+    /* ===== SEMANTIC COLORS ===== */
+
+    /* Error/Danger */
+    --color-error-bg: #7f1d1d;
+    --color-error-text: #fecaca;
+    --color-error-light-bg: #fee2e2;
+
+    /* Success */
+    --color-success: #10b981;
+    --color-success-dark: #059669;
+
+    /* Warning/Info */
+    --color-info-bg: #164e63;
+    --color-info-text: #67e8f9;
+    --color-info-hover: #0e7490;
+
+    /* ===== SHADOW & EFFECTS ===== */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-dark: rgba(0, 0, 0, 0.4);
+
+    /* ===== COMPONENT COLORS ===== */
+
+    /* Buttons */
+    --btn-primary-bg: var(--accent-primary);
+    --btn-primary-hover: var(--accent-primary-dark);
+    --btn-primary-active: var(--accent-primary-dark);
+    --btn-primary-disabled: var(--text-muted);
+
+    /* Edit/Info Buttons */
+    --btn-edit-bg: var(--color-info-bg);
+    --btn-edit-text: var(--color-info-text);
+    --btn-edit-hover: #0e7490;
+
+    /* Delete/Danger Buttons */
+    --btn-delete-bg: var(--color-error-bg);
+    --btn-delete-text: var(--color-error-text);
+    --btn-delete-hover: #b91c1c;
+
+    /* Cards */
+    --card-bg: var(--bg-secondary);
+    --card-border: var(--border-color);
+
+    /* Input Fields */
+    --input-bg: var(--bg-secondary);
+    --input-border: var(--border-color);
+    --input-text: var(--text-primary);
+    --input-focus-border: var(--accent-primary);
+    --input-focus-shadow: rgba(16, 185, 129, 0.1);
+
+    /* Links */
+    --link-color: var(--accent-primary);
+    --link-hover: var(--accent-primary-dark);
+
+    /* Status Indicators */
+    --status-active: var(--accent-primary);
+    --status-inactive: var(--text-muted);
+
+    /* Ratings & Stars */
+    --rating-color: var(--accent-primary);
+}

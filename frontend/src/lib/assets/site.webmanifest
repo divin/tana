@@ -1,0 +1,21 @@
+{
+  "name": "Tana - Media Tracker",
+  "short_name": "Tana",
+  "description": "A powerful CLI-first media tracker for movies, series, and books",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#10b981",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "start_url": "/"
+}
