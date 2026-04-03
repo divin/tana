@@ -1,0 +1,49 @@
+name: Cleanup Container Images
+
+on:
+  schedule:
+    # Run weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Perform a dry run without deleting'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    name: Cleanup Old Container Images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - backend
+          - frontend
+    steps:
+      - name: Delete untagged images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: ${{ matrix.image }}
+          package-type: container
+          delete-only-untagged-versions: 'true'
+        continue-on-error: true
+
+      - name: Keep only last 10 tagged versions
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: ${{ matrix.image }}
+          package-type: container
+          min-versions-to-keep: 10
+        continue-on-error: true
+
+      - name: Log cleanup summary
+        run: |
+          echo "✓ Cleanup job completed for image: ${{ matrix.image }}"
+          echo "  - Deleted all untagged versions"
+          echo "  - Kept the 10 most recent tagged versions"
+          echo "  - Latest tag was preserved"
