@@ -2,14 +2,14 @@ name: Cleanup Container Images
 
 on:
   schedule:
-    # Run weekly on Sunday at 2 AM UTC
-    - cron: '0 2 * * 0'
+    # Run monthly on the 1st day at 2 AM UTC
+    - cron: "0 2 1 * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Perform a dry run without deleting'
+        description: "Perform a dry run without deleting"
         required: false
-        default: 'true'
+        default: "true"
         type: boolean
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
         with:
           package-name: ${{ matrix.image }}
           package-type: container
-          delete-only-untagged-versions: 'true'
+          delete-only-untagged-versions: "true"
         continue-on-error: true
 
       - name: Keep only last 10 tagged versions
