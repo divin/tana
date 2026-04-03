@@ -92,7 +92,7 @@ pub async fn get_book(
 )]
 pub async fn create_book(
     State(state): State<AppState>,
-    Json(req): Json<BookRequest>,
+    Json(mut req): Json<BookRequest>,
 ) -> Result<(StatusCode, Json<BookResponse>), ApiError> {
     debug!("Creating book: {}", req.title);
 
@@ -100,6 +100,38 @@ pub async fn create_book(
         error!("Failed to open database: {}", e);
         ApiError::internal_server_error("Failed to open database")
     })?;
+
+    // Process cover image if provided (supports both URLs and local file paths)
+    let mut temp_cover_filename: Option<String> = None;
+    if let Some(cover_input) = req.cover_path.take() {
+        let images_dir = state.config.images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let cover_input_owned = cover_input.clone();
+        let images_dir_owned = images_dir_str.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::image::process_image_input(&cover_input_owned, &images_dir_owned)
+        })
+        .await;
+
+        let processed_path = match result {
+            Ok(Ok(path)) => path,
+            Ok(Err(e)) => {
+                error!("Failed to process cover image: {}", e);
+                return Err(ApiError::bad_request(format!(
+                    "Failed to process cover image: {}",
+                    e
+                )));
+            }
+            Err(e) => {
+                error!("Failed to spawn blocking task: {}", e);
+                return Err(ApiError::internal_server_error("Failed to process image"));
+            }
+        };
+
+        temp_cover_filename = Some(processed_path.clone());
+        req.cover_path = Some(processed_path);
+        debug!("Cover image processed successfully for new book");
+    }
 
     let book: Book = req.into();
 
@@ -110,6 +142,41 @@ pub async fn create_book(
 
     let mut created = book;
     created.id = Some(_id);
+
+    // Finalize the image filename with the book ID if an image was provided
+    if let Some(temp_filename) = temp_cover_filename {
+        let images_dir = state.config.images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::image::finalize_image(&images_dir_str, &temp_filename, "book", _id)
+        })
+        .await;
+
+        match result {
+            Ok(Ok(final_filename)) => {
+                created.cover_path = Some(final_filename.clone());
+                // Update the database with the finalized filename
+                if let Err(e) = books::update(db.connection(), _id, &created) {
+                    error!("Failed to update book with finalized image: {}", e);
+                    return Err(ApiError::internal_server_error(
+                        "Failed to finalize image filename",
+                    ));
+                }
+                debug!("Image finalized as: {}", final_filename);
+            }
+            Ok(Err(e)) => {
+                error!("Failed to finalize image: {}", e);
+                return Err(ApiError::internal_server_error(format!(
+                    "Failed to finalize image: {}",
+                    e
+                )));
+            }
+            Err(e) => {
+                error!("Failed to spawn finalize task: {}", e);
+                return Err(ApiError::internal_server_error("Failed to finalize image"));
+            }
+        }
+    }
 
     Ok((StatusCode::CREATED, Json(created.into())))
 }
@@ -131,7 +198,7 @@ pub async fn create_book(
 pub async fn update_book(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-    Json(req): Json<BookRequest>,
+    Json(mut req): Json<BookRequest>,
 ) -> Result<Json<BookResponse>, ApiError> {
     debug!("Updating book with id: {}", id);
 
@@ -148,6 +215,38 @@ pub async fn update_book(
         })?
         .ok_or_else(|| ApiError::not_found("Book not found"))?;
 
+    // Process cover image if provided (supports both URLs and local file paths)
+    let mut temp_cover_filename: Option<String> = None;
+    if let Some(cover_input) = req.cover_path.take() {
+        let images_dir = state.config.images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let cover_input_owned = cover_input.clone();
+        let images_dir_owned = images_dir_str.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::image::process_image_input(&cover_input_owned, &images_dir_owned)
+        })
+        .await;
+
+        let processed_path = match result {
+            Ok(Ok(path)) => path,
+            Ok(Err(e)) => {
+                error!("Failed to process cover image: {}", e);
+                return Err(ApiError::bad_request(format!(
+                    "Failed to process cover image: {}",
+                    e
+                )));
+            }
+            Err(e) => {
+                error!("Failed to spawn blocking task: {}", e);
+                return Err(ApiError::internal_server_error("Failed to process image"));
+            }
+        };
+
+        temp_cover_filename = Some(processed_path.clone());
+        req.cover_path = Some(processed_path);
+        debug!("Cover image processed successfully for book update");
+    }
+
     let mut book: Book = req.into();
     book.id = Some(id);
 
@@ -155,6 +254,41 @@ pub async fn update_book(
         error!("Failed to update book {}: {}", id, e);
         ApiError::internal_server_error(format!("Failed to update book: {}", e))
     })?;
+
+    // Finalize the image filename with the book ID if an image was provided
+    if let Some(temp_filename) = temp_cover_filename {
+        let images_dir = state.config.images_default_directory();
+        let images_dir_str = images_dir.to_string_lossy().to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::image::finalize_image(&images_dir_str, &temp_filename, "book", id)
+        })
+        .await;
+
+        match result {
+            Ok(Ok(final_filename)) => {
+                book.cover_path = Some(final_filename.clone());
+                // Update the database with the finalized filename
+                if let Err(e) = books::update(db.connection(), id, &book) {
+                    error!("Failed to update book with finalized image: {}", e);
+                    return Err(ApiError::internal_server_error(
+                        "Failed to finalize image filename",
+                    ));
+                }
+                debug!("Image finalized as: {}", final_filename);
+            }
+            Ok(Err(e)) => {
+                error!("Failed to finalize image: {}", e);
+                return Err(ApiError::internal_server_error(format!(
+                    "Failed to finalize image: {}",
+                    e
+                )));
+            }
+            Err(e) => {
+                error!("Failed to spawn finalize task: {}", e);
+                return Err(ApiError::internal_server_error("Failed to finalize image"));
+            }
+        }
+    }
 
     Ok(Json(book.into()))
 }

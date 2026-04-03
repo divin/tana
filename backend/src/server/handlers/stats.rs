@@ -49,6 +49,6 @@ pub async fn stats_handler(State(state): State<AppState>) -> Result<Json<StatsRe
         total_movies: movie_count,
         total_series: series_count,
         total_books: book_count,
-        total_media: total,
+        total_count: total,
     }))
 }

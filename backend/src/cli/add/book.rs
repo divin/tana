@@ -9,11 +9,18 @@
 //! tana add book --title "The Rust Book" --author "Steve Klabnik" --date 2024-01-25
 //! ```
 //!
-//! Add a book with complete details including a cover image:
+//! Add a book with complete details including a cover image from a local file:
 //! ```sh
 //! tana add book --title "The Rust Book" --author "Steve Klabnik" \
 //!   --genre "Programming" --pages 500 --date 2024-01-25 --rating 8.5 \
 //!   --notes "Essential resource for learning Rust" --cover /path/to/cover.jpg
+//! ```
+//!
+//! Add a book with a cover image from a URL:
+//! ```sh
+//! tana add book --title "The Rust Book" --author "Steve Klabnik" \
+//!   --genre "Programming" --pages 500 --date 2024-01-25 --rating 8.5 \
+//!   --notes "Essential resource for learning Rust" --cover https://example.com/cover.jpg
 //! ```
 
 use clap::Args;
@@ -67,7 +74,8 @@ pub struct BookArgs {
     #[arg(short, long)]
     pub notes: Option<String>,
 
-    /// Path to book cover image file. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
+    /// Book cover image: local file path or URL. Supported formats: PNG, JPG, JPEG, WebP, GIF, BMP (optional)
+    /// URLs will be automatically downloaded and stored locally.
     #[arg(long)]
     pub cover: Option<String>,
 }
@@ -84,11 +92,11 @@ pub fn execute(ctx: &AppContext, args: BookArgs) -> Result<()> {
     // Create book entry
     let mut book = Book::new(args.title.clone(), args.author, args.date);
 
-    // Copy and set cover path if provided
+    // Process and set cover path if provided (supports both URLs and local file paths)
     if let Some(cover) = args.cover {
         let images_dir = ctx.config().images_default_directory();
         let images_dir_str = images_dir.to_string_lossy().to_string();
-        let cover_path = crate::image::copy_image_file(&cover, &images_dir_str)?;
+        let cover_path = crate::image::process_image_input(&cover, &images_dir_str)?;
         book = book.with_cover_path(cover_path);
     }
     if let Some(isbn) = args.isbn {

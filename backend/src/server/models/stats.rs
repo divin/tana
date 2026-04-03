@@ -11,7 +11,7 @@ pub struct StatsResponse {
     pub total_movies: i64,
     pub total_series: i64,
     pub total_books: i64,
-    pub total_media: i64,
+    pub total_count: i64,
 }
 
 #[cfg(test)]
@@ -24,9 +24,9 @@ mod tests {
             total_movies: 10,
             total_series: 5,
             total_books: 20,
-            total_media: 35,
+            total_count: 35,
         };
 
-        assert_eq!(stats.total_media, 35);
+        assert_eq!(stats.total_count, 35);
     }
 }

@@ -7,6 +7,7 @@
 
 pub mod book;
 pub mod error;
+pub mod health;
 pub mod movie;
 pub mod search;
 pub mod series;
@@ -15,7 +16,8 @@ pub mod stats;
 // Re-export public items for convenient access
 pub use book::{BookRequest, BookResponse};
 pub use error::ErrorResponse;
+pub use health::HealthResponse;
 pub use movie::{MovieRequest, MovieResponse};
-pub use search::SearchResponse;
+pub use search::{GroupedSearchResults, SearchResponse};
 pub use series::{TVSeriesRequest, TVSeriesResponse};
 pub use stats::StatsResponse;

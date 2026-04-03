@@ -6,7 +6,7 @@
 
 use axum::Router;
 use axum::http::Method;
-use axum::http::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
+use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::routing::get;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,9 +16,10 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use super::handlers;
 use super::models::{
-    BookRequest, BookResponse, ErrorResponse, MovieRequest, MovieResponse, SearchResponse,
-    StatsResponse, TVSeriesRequest, TVSeriesResponse,
+    BookRequest, BookResponse, ErrorResponse, HealthResponse, MovieRequest, MovieResponse,
+    SearchResponse, StatsResponse, TVSeriesRequest, TVSeriesResponse,
 };
+use crate::config::Config;
 
 /// Application state for the server
 ///
@@ -28,53 +29,73 @@ use super::models::{
 pub struct AppState {
     /// Path to the SQLite database file
     pub db_path: Arc<PathBuf>,
+    /// Application configuration
+    pub config: Arc<Config>,
 }
 
 impl AppState {
-    /// Create a new application state with the given database path
-    pub fn new(db_path: PathBuf) -> Self {
+    /// Create a new application state with the given database path and config
+    pub fn new(db_path: PathBuf, config: Config) -> Self {
         Self {
             db_path: Arc::new(db_path),
+            config: Arc::new(config),
         }
     }
 }
 
 /// Create a CORS layer with the specified origins
 ///
-/// Configures CORS to allow specified methods and headers with explicit origin validation.
-/// Uses `CorsLayer::new()` as a base and adds each origin explicitly to support credentials.
-/// This is the correct approach when `allow_credentials(true)` is needed.
+/// When `allow_any_origin` is true, allows any origin (development mode only).
+/// When false, restricts to the specified origins list.
 ///
 /// # Arguments
-/// * `origins` - List of allowed origins to explicitly allow
+/// * `origins` - List of allowed origins (used when allow_any_origin is false)
+/// * `allow_any_origin` - If true, allow any origin (development mode). Default should be false for safety.
 ///
 /// # Returns
-/// A configured CorsLayer with explicit origin allowlist and credentials support
-fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
-    // Parse origins into HeaderValues
-    let allow_origins = origins
-        .into_iter()
-        .filter_map(|o| o.parse::<HeaderValue>().ok())
-        .collect::<Vec<_>>();
+/// A configured CorsLayer
+fn create_cors_layer(origins: Vec<String>, allow_any_origin: bool) -> CorsLayer {
+    if allow_any_origin {
+        tracing::warn!("CORS: allowing any origin (development mode)");
+        CorsLayer::new()
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers([CONTENT_TYPE, ACCEPT])
+            .allow_origin(AllowOrigin::any())
+            .expose_headers([CONTENT_TYPE])
+            .max_age(std::time::Duration::from_secs(3600))
+    } else {
+        // Build the restricted origin list from config
+        let allowed_origins = origins
+            .into_iter()
+            .filter_map(|origin| origin.parse().ok())
+            .collect::<Vec<_>>();
 
-    CorsLayer::new()
-        .allow_methods([
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::OPTIONS,
-        ])
-        .allow_headers([CONTENT_TYPE, ACCEPT])
-        .allow_origin(AllowOrigin::list(allow_origins))
-        .expose_headers([CONTENT_TYPE])
-        .max_age(std::time::Duration::from_secs(3600))
+        CorsLayer::new()
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers([CONTENT_TYPE, ACCEPT])
+            .allow_origin(AllowOrigin::list(allowed_origins))
+            .expose_headers([CONTENT_TYPE])
+            .max_age(std::time::Duration::from_secs(3600))
+    }
 }
 
 /// OpenAPI documentation for the Tana API
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        handlers::health::health_handler,
         handlers::movies::list_movies,
         handlers::movies::get_movie,
         handlers::movies::create_movie,
@@ -95,6 +116,7 @@ fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
     ),
     components(
         schemas(
+            HealthResponse,
             MovieRequest,
             MovieResponse,
             TVSeriesRequest,
@@ -115,6 +137,7 @@ fn create_cors_layer(origins: Vec<String>) -> CorsLayer {
         (url = "http://localhost:8080", description = "Development server"),
     ),
     tags(
+        (name = "Health", description = "Service health check"),
         (name = "Movies", description = "Operations for managing movies"),
         (name = "TV Series", description = "Operations for managing TV series"),
         (name = "Books", description = "Operations for managing books"),
@@ -129,16 +152,25 @@ pub struct ApiDoc;
 /// Sets up all routes with shared application state.
 /// Routes are mounted under /api path.
 /// Swagger UI is available at /api/docs with OpenAPI JSON at /api/docs/openapi.json
-/// CORS is configured with the provided origins.
+/// CORS behavior depends on the allow_any_origin flag.
 ///
 /// # Arguments
 /// * `db_path` - Path to the SQLite database file
-/// * `cors_origins` - List of allowed CORS origins
-pub fn create_router(db_path: PathBuf, cors_origins: Vec<String>) -> Router {
-    let state = AppState::new(db_path);
+/// * `config` - Application configuration
+/// * `cors_origins` - List of allowed CORS origins (used when allow_any_origin is false)
+/// * `allow_any_origin` - If true, allow any origin in development (use with caution)
+pub fn create_router(
+    db_path: PathBuf,
+    config: Config,
+    cors_origins: Vec<String>,
+    allow_any_origin: bool,
+) -> Router {
+    let state = AppState::new(db_path, config);
 
     // Build the API routes with shared state
     let api_routes = Router::new()
+        // Health check route: GET /api/health
+        .route("/health", get(handlers::health_handler))
         // Movie routes: GET/POST /api/movies, GET/PUT/DELETE /api/movies/:id
         .route(
             "/movies",
@@ -176,10 +208,12 @@ pub fn create_router(db_path: PathBuf, cors_origins: Vec<String>) -> Router {
         .route("/stats", get(handlers::stats_handler))
         // Search route: GET /api/search?q=query
         .route("/search", get(handlers::search_handler))
+        // Image serving route: GET /api/images/{filename}
+        .route("/images/{filename}", get(handlers::serve_image))
         .with_state(state);
 
     // Create CORS layer with provided origins
-    let cors_layer = create_cors_layer(cors_origins);
+    let cors_layer = create_cors_layer(cors_origins, allow_any_origin);
 
     // Build the main router with the API routes nested under /api
     // Apply CORS layer before nesting routes
@@ -197,7 +231,8 @@ mod tests {
     #[test]
     fn test_app_state_creation() {
         let path = PathBuf::from("/tmp/test.db");
-        let state = AppState::new(path.clone());
+        let config = Config::load().unwrap_or_default();
+        let state = AppState::new(path.clone(), config);
         assert_eq!(*state.db_path, path);
     }
 
@@ -205,18 +240,19 @@ mod tests {
     fn test_router_creation() {
         // Test that the router can be created with a valid path
         let path = PathBuf::from("/tmp/test.db");
+        let config = Config::load().unwrap_or_default();
         let cors_origins = vec![
             "http://localhost:3000".to_string(),
             "http://localhost:8080".to_string(),
         ];
-        let _router = create_router(path, cors_origins);
+        let _router = create_router(path, config, cors_origins, false);
         // If we get here without panicking, the router was created successfully
     }
 
     #[test]
     fn test_cors_layer_creation_single_origin() {
         let origins = vec!["http://localhost:3000".to_string()];
-        let _cors = create_cors_layer(origins);
+        let _cors = create_cors_layer(origins, false);
         // If we get here without panicking, the CORS layer was created successfully
     }
 
@@ -227,14 +263,14 @@ mod tests {
             "http://localhost:8080".to_string(),
             "https://example.com".to_string(),
         ];
-        let _cors = create_cors_layer(origins);
+        let _cors = create_cors_layer(origins, false);
         // If we get here without panicking, the CORS layer was created successfully
     }
 
     #[test]
     fn test_cors_layer_creation_empty_origins() {
         let origins = vec![];
-        let _cors = create_cors_layer(origins);
+        let _cors = create_cors_layer(origins, false);
         // If we get here without panicking, the CORS layer was created with empty origins
     }
 
@@ -242,11 +278,12 @@ mod tests {
     fn test_create_router_includes_cors() {
         // Test that the router can be created and includes CORS configuration
         let path = PathBuf::from("/tmp/test.db");
+        let config = Config::load().unwrap_or_default();
         let cors_origins = vec![
             "http://localhost:3000".to_string(),
             "http://localhost:8080".to_string(),
         ];
-        let _router = create_router(path, cors_origins);
+        let _router = create_router(path, config, cors_origins, false);
         // If we get here without panicking, the router with CORS was created successfully
     }
 }

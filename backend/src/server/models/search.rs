@@ -19,3 +19,14 @@ pub enum SearchResponse {
     #[serde(rename = "book")]
     Book(BookResponse),
 }
+
+/// Grouped search results organized by media type
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct GroupedSearchResults {
+    /// Matching movies
+    pub movies: Vec<MovieResponse>,
+    /// Matching TV series
+    pub series: Vec<TVSeriesResponse>,
+    /// Matching books
+    pub books: Vec<BookResponse>,
+}

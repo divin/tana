@@ -6,7 +6,7 @@
 use crate::db::Database;
 use crate::db::queries::{books, movies, tv_series};
 use crate::server::handlers::error::ApiError;
-use crate::server::models::SearchResponse;
+use crate::server::models::GroupedSearchResults;
 use crate::server::routes::AppState;
 use axum::{
     Json,
@@ -30,14 +30,14 @@ pub struct SearchParams {
         ("q" = String, Query, description = "Search query string to match against titles, directors, authors, and notes")
     ),
     responses(
-        (status = 200, description = "Search results", body = Vec<SearchResponse>),
+        (status = 200, description = "Search results grouped by media type", body = GroupedSearchResults),
     ),
     tag = "Search"
 )]
 pub async fn search_handler(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
-) -> Result<Json<Vec<SearchResponse>>, ApiError> {
+) -> Result<Json<GroupedSearchResults>, ApiError> {
     debug!("Searching for: {}", params.q);
 
     let db = Database::open(state.db_path.as_ref()).map_err(|e| {
@@ -47,7 +47,9 @@ pub async fn search_handler(
 
     let query = params.q.to_lowercase();
 
-    let mut results = Vec::new();
+    let mut movies_results = Vec::new();
+    let mut series_results = Vec::new();
+    let mut books_results = Vec::new();
 
     // Search movies
     if let Ok(all_movies) = movies::get_all(db.connection(), None) {
@@ -64,7 +66,7 @@ pub async fn search_handler(
                     .map(|n| n.to_lowercase().contains(&query))
                     .unwrap_or(false)
             {
-                results.push(SearchResponse::Movie(movie.into()));
+                movies_results.push(movie.into());
             }
         }
     }
@@ -79,7 +81,7 @@ pub async fn search_handler(
                     .map(|n| n.to_lowercase().contains(&query))
                     .unwrap_or(false)
             {
-                results.push(SearchResponse::Series(series.into()));
+                series_results.push(series.into());
             }
         }
     }
@@ -100,12 +102,16 @@ pub async fn search_handler(
                     .map(|n| n.to_lowercase().contains(&query))
                     .unwrap_or(false)
             {
-                results.push(SearchResponse::Book(book.into()));
+                books_results.push(book.into());
             }
         }
     }
 
-    Ok(Json(results))
+    Ok(Json(GroupedSearchResults {
+        movies: movies_results,
+        series: series_results,
+        books: books_results,
+    }))
 }
 
 #[cfg(test)]
