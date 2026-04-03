@@ -1,0 +1,61 @@
+services:
+  backend:
+    image: ghcr.io/divin/tana/backend:${TANA_VERSION:-latest}
+    container_name: tana-api
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - ~/.local/share/tana:/home/tana/.local/share/tana
+    networks:
+      - tana-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--connect-timeout",
+          "2",
+          "--max-time",
+          "3",
+          "-f",
+          "http://localhost:8080/api/health",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/divin/tana/frontend:${TANA_VERSION:-latest}
+    container_name: tana-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - tana-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--connect-timeout",
+          "2",
+          "--max-time",
+          "3",
+          "-f",
+          "http://localhost:3000/",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  tana-network:
+    driver: bridge
