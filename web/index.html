@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Tana - Media Tracking CLI & Web App</title>
+        <meta
+            name="description"
+            content="A lightweight Rust CLI tool for tracking movies, TV series, and books with a REST API and modern web interface."
+        />
+        <meta
+            name="keywords"
+            content="media tracker, movies, TV series, books, CLI, REST API, Rust"
+        />
+        <meta name="author" content="Tana Contributors" />
+        <link rel="canonical" href="https://tana.example.com" />
+
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='bold' text-anchor='middle' x='50%' dominant-baseline='middle'>📚</text></svg>"
+        />
+
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            :root {
+                --primary: #10b981;
+                --primary-dark: #059669;
+                --primary-light: #6ee7b7;
+                --secondary: #0f766e;
+                --text-dark: #f1f5f9;
+                --text-light: #94a3b8;
+                --bg-light: #1e293b;
+                --border-color: #334155;
+                --success: #10b981;
+                --accent: #10b981;
+                --bg-primary: #0f172a;
+            }
+
+            html {
+                scroll-behavior: smooth;
+            }
+
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    Oxygen, Ubuntu, Cantarell, sans-serif;
+                line-height: 1.6;
+                color: var(--text-dark);
+                background: var(--bg-primary);
+            }
+
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 20px;
+            }
+
+            /* Navigation */
+            nav {
+                position: fixed;
+                top: 0;
+                width: 100%;
+                background: rgba(15, 23, 42, 0.95);
+                backdrop-filter: blur(10px);
+                border-bottom: 1px solid var(--border-color);
+                z-index: 1000;
+            }
+
+            .nav-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 1rem 2rem;
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+
+            .logo {
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: var(--primary);
+                text-decoration: none;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .nav-links {
+                display: flex;
+                gap: 2rem;
+                list-style: none;
+            }
+
+            .nav-links a {
+                color: var(--text-dark);
+                text-decoration: none;
+                font-weight: 500;
+                transition: color 0.3s;
+            }
+
+            .nav-links a:hover {
+                color: var(--primary);
+            }
+
+            .nav-links .cta {
+                background: var(--primary);
+                color: white;
+                padding: 0.5rem 1rem;
+                border-radius: 0.375rem;
+                transition: background 0.3s;
+            }
+
+            .nav-links .cta:hover {
+                background: var(--primary-dark);
+            }
+
+            @media (max-width: 768px) {
+                .nav-links {
+                    display: none;
+                }
+            }
+
+            /* Hero Section */
+            .hero {
+                margin-top: 60px;
+                padding: 80px 0;
+                background: linear-gradient(
+                    135deg,
+                    var(--primary) 0%,
+                    var(--secondary) 100%
+                );
+                color: white;
+                text-align: center;
+            }
+
+            .hero h1 {
+                font-size: clamp(2rem, 8vw, 4rem);
+                margin-bottom: 1rem;
+                font-weight: 800;
+            }
+
+            .hero p {
+                font-size: 1.25rem;
+                margin-bottom: 2rem;
+                opacity: 0.95;
+                max-width: 600px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-buttons {
+                display: flex;
+                gap: 1rem;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
+            .btn {
+                padding: 0.875rem 1.75rem;
+                border-radius: 0.5rem;
+                font-weight: 600;
+                text-decoration: none;
+                border: none;
+                cursor: pointer;
+                transition: all 0.3s;
+                font-size: 1rem;
+                display: inline-block;
+            }
+
+            .btn-primary {
+                background: white;
+                color: var(--primary);
+            }
+
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            }
+
+            .btn-secondary {
+                background: transparent;
+                color: white;
+                border: 2px solid white;
+            }
+
+            .btn-secondary:hover {
+                background: white;
+                color: var(--primary);
+            }
+
+            /* Features Section */
+            .features {
+                padding: 80px 0;
+                background: var(--bg-primary);
+            }
+
+            .section-title {
+                text-align: center;
+                font-size: 2.5rem;
+                margin-bottom: 3rem;
+                color: var(--text-dark);
+            }
+
+            .features-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 2rem;
+            }
+
+            .feature-card {
+                background: var(--bg-light);
+                padding: 2rem;
+                border-radius: 0.75rem;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+                border: 1px solid var(--border-color);
+                transition: all 0.3s;
+            }
+
+            .feature-card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 20px 25px rgba(0, 0, 0, 0.1);
+            }
+
+            .feature-icon {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+            }
+
+            .feature-card h3 {
+                font-size: 1.25rem;
+                margin-bottom: 0.75rem;
+                color: var(--primary);
+            }
+
+            .feature-card p {
+                color: var(--text-light);
+                line-height: 1.7;
+            }
+
+            /* Tech Stack Section */
+            .screenshots {
+                padding: 80px 0;
+                background: var(--bg-light);
+            }
+
+            .screenshots-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 2rem;
+                margin-top: 2rem;
+            }
+
+            .screenshot-item {
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                transition:
+                    transform 0.3s,
+                    box-shadow 0.3s;
+                display: flex;
+                flex-direction: column;
+                border: 1px solid var(--border-color);
+            }
+
+            .screenshot-item:hover {
+                transform: translateY(-8px);
+                box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+            }
+
+            .screenshot-item img {
+                width: 100%;
+                height: 280px;
+                object-fit: cover;
+                display: block;
+                cursor: pointer;
+            }
+
+            .screenshot-caption {
+                padding: 1rem;
+                background: var(--bg-light);
+                text-align: center;
+                color: var(--text-dark);
+                font-weight: 500;
+                flex-grow: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-top: 1px solid var(--border-color);
+            }
+
+            /* Modal Styles */
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.95);
+                animation: fadeIn 0.3s;
+            }
+
+            .modal.active {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .modal-content {
+                max-width: 90vw;
+                max-height: 90vh;
+                position: relative;
+            }
+
+            .modal-content img {
+                width: 100%;
+                height: auto;
+                max-height: 90vh;
+                object-fit: contain;
+            }
+
+            .modal-close {
+                position: absolute;
+                top: 20px;
+                right: 40px;
+                color: white;
+                font-size: 40px;
+                font-weight: bold;
+                cursor: pointer;
+                z-index: 1001;
+            }
+
+            .modal-close:hover {
+                color: #ccc;
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+
+            .tech-stack {
+                padding: 80px 0;
+                background: var(--bg-primary);
+            }
+
+            .tech-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1.5rem;
+                margin-top: 2rem;
+            }
+
+            .tech-item {
+                background: var(--bg-light);
+                padding: 1.5rem;
+                border-radius: 0.5rem;
+                text-align: center;
+                border: 1px solid var(--border-color);
+                color: var(--text-dark);
+            }
+
+            .tech-item strong {
+                color: var(--primary);
+                display: block;
+                margin-bottom: 0.5rem;
+            }
+
+            /* Quick Start Section */
+            .quick-start {
+                padding: 80px 0;
+                background: var(--bg-primary);
+            }
+
+            .code-block-wrapper {
+                position: relative;
+                margin: 1rem 0;
+            }
+
+            .code-block {
+                background: #1a1f2e;
+                color: #d1fae5;
+                padding: 1.5rem;
+                border-radius: 0.5rem;
+                overflow-x: auto;
+                font-family: "Monaco", "Courier New", monospace;
+                font-size: 0.875rem;
+                line-height: 1.6;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                text-align: left;
+            }
+
+            .code-copy-btn {
+                position: absolute;
+                top: 0.75rem;
+                right: 0.75rem;
+                background: var(--primary);
+                color: white;
+                border: none;
+                padding: 0.5rem 1rem;
+                border-radius: 0.375rem;
+                font-size: 0.8rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-family: inherit;
+            }
+
+            .code-copy-btn:hover {
+                background: var(--primary-dark);
+                transform: translateY(-1px);
+            }
+
+            .code-copy-btn.copied {
+                background: var(--primary-light);
+                color: var(--bg-primary);
+            }
+
+            .code-comment {
+                color: #64748b;
+            }
+
+            .code-keyword {
+                color: #f59e0b;
+            }
+
+            .code-string {
+                color: #10b981;
+            }
+
+            /* CTA Section */
+            .cta-section {
+                padding: 80px 0;
+                background: linear-gradient(
+                    135deg,
+                    var(--primary) 0%,
+                    var(--secondary) 100%
+                );
+                color: white;
+                text-align: center;
+            }
+
+            .cta-section h2 {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+            }
+
+            .cta-section p {
+                font-size: 1.25rem;
+                margin-bottom: 2rem;
+                opacity: 0.95;
+            }
+
+            /* Footer */
+            footer {
+                background: #0f172a;
+                color: var(--text-dark);
+                padding: 3rem 0;
+                border-top: 1px solid var(--border-color);
+            }
+
+            .footer-content {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 2rem;
+                margin-bottom: 2rem;
+            }
+
+            .footer-section h4 {
+                margin-bottom: 1rem;
+                color: var(--primary-light);
+            }
+
+            .footer-section ul {
+                list-style: none;
+            }
+
+            .footer-section a {
+                color: var(--text-light);
+                text-decoration: none;
+                transition: color 0.3s;
+            }
+
+            .footer-section a:hover {
+                color: var(--primary);
+            }
+
+            .footer-bottom {
+                border-top: 1px solid var(--border-color);
+                padding-top: 2rem;
+                text-align: center;
+                color: var(--text-light);
+            }
+
+            /* Responsive */
+            @media (max-width: 768px) {
+                .hero {
+                    padding: 60px 0;
+                    margin-top: 50px;
+                }
+
+                .hero h1 {
+                    font-size: 2rem;
+                }
+
+                .hero p {
+                    font-size: 1rem;
+                }
+
+                .section-title {
+                    font-size: 1.75rem;
+                }
+
+                .nav-container {
+                    padding: 0.75rem 1rem;
+                }
+
+                .features,
+                .tech-stack,
+                .quick-start,
+                .cta-section {
+                    padding: 50px 0;
+                }
+
+                .quick-start-grid {
+                    grid-template-columns: 1fr !important;
+                }
+            }
+
+            /* Animations */
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .fade-in {
+                animation: fadeInUp 0.6s ease-out forwards;
+            }
+
+            .fade-in:nth-child(2) {
+                animation-delay: 0.1s;
+            }
+
+            .fade-in:nth-child(3) {
+                animation-delay: 0.2s;
+            }
+
+            .fade-in:nth-child(4) {
+                animation-delay: 0.3s;
+            }
+
+            .fade-in:nth-child(5) {
+                animation-delay: 0.4s;
+            }
+
+            .fade-in:nth-child(6) {
+                animation-delay: 0.5s;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Navigation -->
+        <nav>
+            <div class="nav-container">
+                <a href="#home" class="logo">📚 Tana</a>
+                <ul class="nav-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#tech">Tech Stack</a></li>
+                    <li><a href="#quick-start">Quick Start</a></li>
+                    <li>
+                        <a href="https://github.com/divin/tana" class="cta"
+                            >GitHub</a
+                        >
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="hero" id="home">
+            <div class="container">
+                <h1>Track Your Media 📚🎥📖</h1>
+                <p>
+                    A lightweight Rust CLI tool and modern web app for tracking
+                    movies, TV series, and books you've consumed. Built with
+                    simplicity and power in mind.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#quick-start" class="btn btn-primary"
+                        >Get Started</a
+                    >
+                    <a
+                        href="https://github.com/divin/tana"
+                        class="btn btn-secondary"
+                        >View on GitHub</a
+                    >
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features" id="features">
+            <div class="container">
+                <h2 class="section-title">Powerful Features</h2>
+                <div class="features-grid">
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Lightning Fast CLI</h3>
+                        <p>
+                            Built in Rust for blazing fast performance. Add,
+                            edit, and manage your media from the command line
+                            with zero overhead.
+                        </p>
+                    </div>
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">🌐</div>
+                        <h3>REST API & Web UI</h3>
+                        <p>
+                            Comprehensive REST API for integration with other
+                            tools. Beautiful web interface for a modern user
+                            experience.
+                        </p>
+                    </div>
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">🔍</div>
+                        <h3>Smart Search</h3>
+                        <p>
+                            Search across all your media with powerful filtering
+                            and sorting capabilities. Find exactly what you're
+                            looking for.
+                        </p>
+                    </div>
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">📊</div>
+                        <h3>Statistics</h3>
+                        <p>
+                            Track your consumption patterns with detailed
+                            statistics. See how much you've watched, read, and
+                            more.
+                        </p>
+                    </div>
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">🐳</div>
+                        <h3>Docker Ready</h3>
+                        <p>
+                            Deploy anywhere with included Docker images. Single
+                            command full-stack deployment with docker-compose.
+                        </p>
+                    </div>
+                    <div class="feature-card fade-in">
+                        <div class="feature-icon">📁</div>
+                        <h3>Open Data</h3>
+                        <p>
+                            SQLite database with XDG Base Directory compliance.
+                            Your data is yours. No cloud lock-in.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tech Stack -->
+        <section class="tech-stack" id="tech">
+            <div class="container">
+                <h2 class="section-title">Built With Modern Tech</h2>
+                <div class="tech-grid">
+                    <div class="tech-item">
+                        <strong>Rust</strong>
+                        <p>
+                            Safe, fast, and reliable systems programming
+                            language
+                        </p>
+                    </div>
+                    <div class="tech-item">
+                        <strong>Axum</strong>
+                        <p>Ergonomic async web framework</p>
+                    </div>
+                    <div class="tech-item">
+                        <strong>SQLite</strong>
+                        <p>Lightweight, zero-configuration database</p>
+                    </div>
+                    <div class="tech-item">
+                        <strong>SvelteKit</strong>
+                        <p>Cybernetically enhanced web apps</p>
+                    </div>
+                    <div class="tech-item">
+                        <strong>TypeScript</strong>
+                        <p>Type-safe JavaScript development</p>
+                    </div>
+                    <div class="tech-item">
+                        <strong>Docker</strong>
+                        <p>Containerized deployment</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quick Start -->
+        <section class="quick-start" id="quick-start">
+            <div class="container">
+                <h2 class="section-title">🛠️ CLI-First Design</h2>
+                <p
+                    style="
+                        text-align: center;
+                        color: var(--text-light);
+                        margin-bottom: 2rem;
+                    "
+                >
+                    Built as a powerful CLI tool with an optional web interface
+                </p>
+                <div
+                    style="
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 2rem;
+                        margin-top: 2rem;
+                    "
+                    class="quick-start-grid"
+                >
+                    <div>
+                        <h3 style="color: var(--primary); margin-bottom: 1rem">
+                            📦 Using Docker (Recommended)
+                        </h3>
+                        <p style="margin-bottom: 1rem">
+                            The fastest way to get started with both the API and
+                            web interface:
+                        </p>
+                        <div class="code-block-wrapper">
+                            <button
+                                class="code-copy-btn"
+                                onclick="
+                                    copyToClipboard(
+                                        this,
+                                        '$ git clone https://github.com/divin/tana.git\n$ cd tana\n$ docker-compose up',
+                                    )
+                                "
+                            >
+                                Copy
+                            </button>
+                            <div class="code-block">$ git clone https://github.com/divin/tana.git
+$ cd tana
+$ docker-compose up</div>
+                        </div>
+                        <p style="color: var(--text-light); font-size: 0.9rem">
+                            Access at http://localhost:3000
+                        </p>
+                    </div>
+                    <div>
+                        <h3 style="color: var(--primary); margin-bottom: 1rem">
+                            ⚙️ From Source
+                        </h3>
+                        <p style="margin-bottom: 1rem">
+                            Install and use the Rust CLI directly:
+                        </p>
+                        <div class="code-block-wrapper">
+                            <button
+                                class="code-copy-btn"
+                                onclick="
+                                    copyToClipboard(
+                                        this,
+                                        '# Install from source\n$ cargo install --path ./backend\n\n# Add a movie\n$ tana add movie \"The Matrix\" --rating 9.0\n\n# Show all movies\n$ tana show movies',
+                                    )
+                                "
+                            >
+                                Copy
+                            </button>
+                            <div class="code-block"># Install from source
+$ cargo install --path ./backend
+
+# Add a movie
+$ tana add movie "The Matrix" --rating 9.0
+
+# Show all movies
+$ tana show movies</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Screenshots Section -->
+        <section class="screenshots">
+            <div class="container">
+                <h2 class="section-title">See It In Action</h2>
+                <p
+                    style="
+                        text-align: center;
+                        color: var(--text-light);
+                        margin-bottom: 2rem;
+                    "
+                >
+                    Explore the intuitive web interface for managing your media
+                    collection
+                </p>
+                <div class="screenshots-grid">
+                    <div class="screenshot-item fade-in">
+                        <img
+                            src="dashboard.png"
+                            alt="Dashboard"
+                            data-fullscreen="dashboard.png"
+                        />
+                        <div class="screenshot-caption">Dashboard Overview</div>
+                    </div>
+                    <div class="screenshot-item fade-in">
+                        <img
+                            src="movies.png"
+                            alt="Movies View"
+                            data-fullscreen="movies.png"
+                        />
+                        <div class="screenshot-caption">Movies Library</div>
+                    </div>
+                    <div class="screenshot-item fade-in">
+                        <img
+                            src="search.png"
+                            alt="Search"
+                            data-fullscreen="search.png"
+                        />
+                        <div class="screenshot-caption">Search & Filter</div>
+                    </div>
+                    <div class="screenshot-item fade-in">
+                        <img
+                            src="details.png"
+                            alt="Details"
+                            data-fullscreen="details.png"
+                        />
+                        <div class="screenshot-caption">Item Details</div>
+                    </div>
+                    <div class="screenshot-item fade-in">
+                        <img
+                            src="edit.png"
+                            alt="Edit"
+                            data-fullscreen="edit.png"
+                        />
+                        <div class="screenshot-caption">Edit Entry</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA Section -->
+        <section class="cta-section">
+            <div class="container">
+                <h2>Ready to Track Your Media?</h2>
+                <p>
+                    Join the community and start organizing your entertainment
+                    today.
+                </p>
+                <a href="https://github.com/divin/tana" class="btn btn-primary"
+                    >Get Started on GitHub</a
+                >
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <div class="container">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h4>About</h4>
+                        <ul>
+                            <li>
+                                <a href="https://github.com/divin/tana"
+                                    >GitHub Repository</a
+                                >
+                            </li>
+                            <li>
+                                <a href="https://github.com/divin/tana/issues"
+                                    >Report Issues</a
+                                >
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="footer-section">
+                        <h4>Documentation</h4>
+                        <ul>
+                            <li>
+                                <a href="https://github.com/divin/tana#readme"
+                                    >README</a
+                                >
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="footer-section">
+                        <h4>Resources</h4>
+                        <ul>
+                            <li>
+                                <a href="https://www.rust-lang.org/">Rust</a>
+                            </li>
+                            <li>
+                                <a href="https://kit.svelte.dev/">SvelteKit</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>
+                        &copy; <span id="year"></span> Tana. Licensed under
+                        Apache 2.0 or MIT. Made with ❤️ and Rust.
+                    </p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Image Modal -->
+        <div id="imageModal" class="modal">
+            <span class="modal-close">&times;</span>
+            <div class="modal-content">
+                <img id="modalImage" src="" alt="Fullscreen" />
+            </div>
+        </div>
+
+        <script>
+            // Smooth scroll for anchor links
+            document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+                anchor.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(
+                        this.getAttribute("href"),
+                    );
+                    if (target) {
+                        target.scrollIntoView({ behavior: "smooth" });
+                    }
+                });
+            });
+
+            // Fade in animations on scroll
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: "0px 0px -100px 0px",
+            };
+
+            const observer = new IntersectionObserver(function (entries) {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("fade-in");
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            document
+                .querySelectorAll(".feature-card, .screenshot-item")
+                .forEach((card) => {
+                    observer.observe(card);
+                });
+
+            // Set current year in footer
+            document.getElementById("year").textContent =
+                new Date().getFullYear();
+
+            // Modal functionality for screenshots
+            const modal = document.getElementById("imageModal");
+            const modalImage = document.getElementById("modalImage");
+            const modalClose = document.querySelector(".modal-close");
+
+            // Open modal on image click
+            document.querySelectorAll(".screenshot-item img").forEach((img) => {
+                img.addEventListener("click", function () {
+                    const fullscreenSrc = this.getAttribute("data-fullscreen");
+                    modalImage.src = fullscreenSrc;
+                    modal.classList.add("active");
+                    document.body.style.overflow = "hidden";
+                });
+            });
+
+            // Close modal on close button click
+            modalClose.addEventListener("click", function () {
+                modal.classList.remove("active");
+                document.body.style.overflow = "auto";
+            });
+
+            // Close modal on outside click
+            modal.addEventListener("click", function (e) {
+                if (e.target === modal) {
+                    modal.classList.remove("active");
+                    document.body.style.overflow = "auto";
+                }
+            });
+
+            // Close modal on ESC key
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && modal.classList.contains("active")) {
+                    modal.classList.remove("active");
+                    document.body.style.overflow = "auto";
+                }
+            });
+
+            // Copy to clipboard functionality
+            function copyToClipboard(button, text) {
+                navigator.clipboard
+                    .writeText(text)
+                    .then(() => {
+                        // Change button appearance
+                        button.textContent = "Copied!";
+                        button.classList.add("copied");
+
+                        // Reset button after 2 seconds
+                        setTimeout(() => {
+                            button.textContent = "Copy";
+                            button.classList.remove("copied");
+                        }, 2000);
+                    })
+                    .catch(() => {
+                        // Fallback for older browsers
+                        const textarea = document.createElement("textarea");
+                        textarea.value = text;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(textarea);
+
+                        button.textContent = "Copied!";
+                        button.classList.add("copied");
+
+                        setTimeout(() => {
+                            button.textContent = "Copy";
+                            button.classList.remove("copied");
+                        }, 2000);
+                    });
+            }
+        </script>
+    </body>
+</html>
