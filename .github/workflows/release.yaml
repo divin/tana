@@ -223,12 +223,6 @@ jobs:
 
             ${{ steps.changelog.outputs.changelog }}
 
-            ## 🔗 More Information
-
-            - [Repository](https://github.com/${{ github.repository }})
-            - [Backend Image Registry](https://github.com/${{ github.repository }}/pkgs/container/backend)
-            - [Frontend Image Registry](https://github.com/${{ github.repository }}/pkgs/container/frontend)
-
             ---
 
             Happy tracking! 📚🎥
