@@ -47,6 +47,7 @@
     .media-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        grid-auto-rows: 1fr;
         gap: 16px;
     }
 

@@ -17,6 +17,16 @@
         onHoverChange,
     }: Props = $props();
 
+    let isTouched = $state(false);
+    let isTouchDevice = $state(false);
+
+    // Auto-close details when another card is tapped
+    $effect(() => {
+        if (!isHovered && isTouched && isTouchDevice) {
+            isTouched = false;
+        }
+    });
+
     function getMediaImage(item: Media): string {
         let imagePath: string | undefined;
 
@@ -26,16 +36,13 @@
             imagePath = item.cover_path;
         }
 
-        // If we have an image path, process it
         if (imagePath) {
-            // If it's an external URL (starts with http:// or https://), use it as-is
             if (
                 imagePath.startsWith("http://") ||
                 imagePath.startsWith("https://")
             ) {
                 return imagePath;
             }
-            // Otherwise, it's a local filename - prepend the API endpoint
             return `/api/images/${imagePath}`;
         }
 
@@ -67,12 +74,47 @@
         return "book";
     }
 
-    function handlePointerEnter() {
-        onHoverChange?.(true);
+    function handlePointerEnter(e: PointerEvent) {
+        // Only trigger hover on non-touch devices
+        if (e.pointerType !== "touch") {
+            onHoverChange?.(true);
+        }
     }
 
-    function handlePointerLeave() {
-        onHoverChange?.(false);
+    function handlePointerLeave(e: PointerEvent) {
+        // Only trigger on non-touch devices, and keep overlay visible if tapped on touch device
+        if (e.pointerType !== "touch" && !isTouched) {
+            onHoverChange?.(false);
+        }
+    }
+
+    function handlePointerDown(e: PointerEvent) {
+        // Detect touch device and toggle overlay on touch
+        if (e.pointerType === "touch") {
+            isTouchDevice = true;
+            isTouched = !isTouched;
+            onHoverChange?.(isTouched);
+        }
+    }
+
+    function handleOverlayClick(e: MouseEvent | PointerEvent) {
+        // Close overlay when clicking outside the content area on mobile
+        if (isTouched && isTouchDevice && e.target === e.currentTarget) {
+            isTouched = false;
+            onHoverChange?.(false);
+        }
+    }
+
+    function handleButtonClick(e: MouseEvent) {
+        e.stopPropagation();
+    }
+
+    // Determine whether to show overlay
+    function shouldShowOverlay(): boolean {
+        if (isTouchDevice) {
+            return isTouched;
+        }
+        return isHovered;
     }
 </script>
 
@@ -82,231 +124,234 @@
     aria-label={media.title}
     onpointerenter={handlePointerEnter}
     onpointerleave={handlePointerLeave}
+    onpointerdown={handlePointerDown}
 >
-    <div class="media-image-container" class:blurred={isHovered}>
+    <div class="media-image-container" class:blurred={shouldShowOverlay()}>
         <img src={getMediaImage(media)} alt={media.title} class="media-image" />
     </div>
 
-    {#if isHovered}
-        <div class="hover-overlay">
-            <div class="overlay-content">
-                <h3 class="overlay-title">{media.title}</h3>
-
-                {#if getMediaType(media) === "movie"}
-                    {@const movie = media as Movie}
-                    <div class="info-group">
-                        {#if movie.director}
-                            <div class="info-row">
-                                <span class="info-label">Director:</span>
-                                <span class="info-value">{movie.director}</span>
-                            </div>
-                        {/if}
-                        {#if movie.release_year}
-                            <div class="info-row">
-                                <span class="info-label">Year:</span>
-                                <span class="info-value"
-                                    >{movie.release_year}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if movie.rating}
-                            <div class="info-row">
-                                <span class="info-label">Rating:</span>
-                                <span class="info-value rating-value"
-                                    >★ {movie.rating.toFixed(1)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if movie.watched_date}
-                            <div class="info-row">
-                                <span class="info-label">Watched:</span>
-                                <span class="info-value"
-                                    >{formatDate(movie.watched_date)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if movie.notes}
-                            <div class="info-row">
-                                <span class="info-label">Notes:</span>
-                                <span class="info-value notes"
-                                    >{movie.notes}</span
-                                >
-                            </div>
-                        {/if}
-                    </div>
-                {:else if getMediaType(media) === "series"}
-                    {@const series = media as TVSeries}
-                    <div class="info-group">
-                        {#if series.release_year}
-                            <div class="info-row">
-                                <span class="info-label">Year:</span>
-                                <span class="info-value"
-                                    >{series.release_year}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.status}
-                            <div class="info-row">
-                                <span class="info-label">Status:</span>
-                                <span class="info-value status"
-                                    >{series.status}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.total_seasons}
-                            <div class="info-row">
-                                <span class="info-label">Total Seasons:</span>
-                                <span class="info-value"
-                                    >{series.total_seasons}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.current_season}
-                            <div class="info-row">
-                                <span class="info-label">Current Season:</span>
-                                <span class="info-value"
-                                    >{series.current_season}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.current_episode}
-                            <div class="info-row">
-                                <span class="info-label">Current Episode:</span>
-                                <span class="info-value"
-                                    >{series.current_episode}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.rating}
-                            <div class="info-row">
-                                <span class="info-label">Rating:</span>
-                                <span class="info-value rating-value"
-                                    >★ {series.rating.toFixed(1)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.started_date}
-                            <div class="info-row">
-                                <span class="info-label">Started:</span>
-                                <span class="info-value"
-                                    >{formatDate(series.started_date)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.completed_date}
-                            <div class="info-row">
-                                <span class="info-label">Completed:</span>
-                                <span class="info-value"
-                                    >{formatDate(series.completed_date)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if series.notes}
-                            <div class="info-row">
-                                <span class="info-label">Notes:</span>
-                                <span class="info-value notes"
-                                    >{series.notes}</span
-                                >
-                            </div>
-                        {/if}
-                    </div>
-                {:else}
-                    {@const book = media as Book}
-                    <div class="info-group">
-                        {#if book.author}
-                            <div class="info-row">
-                                <span class="info-label">Author:</span>
-                                <span class="info-value">{book.author}</span>
-                            </div>
-                        {/if}
-                        {#if book.isbn}
-                            <div class="info-row">
-                                <span class="info-label">ISBN:</span>
-                                <span class="info-value">{book.isbn}</span>
-                            </div>
-                        {/if}
-                        {#if book.genre}
-                            <div class="info-row">
-                                <span class="info-label">Genre:</span>
-                                <span class="info-value">{book.genre}</span>
-                            </div>
-                        {/if}
-                        {#if book.pages}
-                            <div class="info-row">
-                                <span class="info-label">Pages:</span>
-                                <span class="info-value">{book.pages}</span>
-                            </div>
-                        {/if}
-                        {#if book.rating}
-                            <div class="info-row">
-                                <span class="info-label">Rating:</span>
-                                <span class="info-value rating-value"
-                                    >★ {book.rating.toFixed(1)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if book.started_date}
-                            <div class="info-row">
-                                <span class="info-label">Started:</span>
-                                <span class="info-value"
-                                    >{formatDate(book.started_date)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if book.completed_date}
-                            <div class="info-row">
-                                <span class="info-label">Completed:</span>
-                                <span class="info-value"
-                                    >{formatDate(book.completed_date)}</span
-                                >
-                            </div>
-                        {/if}
-                        {#if book.notes}
-                            <div class="info-row">
-                                <span class="info-label">Notes:</span>
-                                <span class="info-value notes"
-                                    >{book.notes}</span
-                                >
-                            </div>
-                        {/if}
-                    </div>
+    <!-- Keep info visible but hidden - maintains card height -->
+    <div class="media-info" class:invisible={shouldShowOverlay()}>
+        <div class="title-year">
+            <h3 class="media-title">
+                {media.title}
+                {#if getYear(media)}
+                    <span class="year">({getYear(media)})</span>
                 {/if}
-            </div>
-
-            <div class="overlay-actions">
-                {#if onEdit}
-                    <button
-                        class="action-btn edit-btn"
-                        onclick={() => onEdit?.(media)}
-                    >
-                        Edit
-                    </button>
-                {/if}
-                {#if onDelete}
-                    <button
-                        class="action-btn delete-btn"
-                        onclick={() => onDelete?.(media)}
-                    >
-                        Delete
-                    </button>
-                {/if}
-            </div>
+            </h3>
         </div>
-    {:else}
-        <div class="media-info">
-            <div class="title-year">
-                <h3 class="media-title">
-                    {media.title}
-                    {#if getYear(media)}
-                        <span class="year">({getYear(media)})</span>
+        {#if media.rating}
+            <p class="media-rating">★ {media.rating.toFixed(1)}</p>
+        {/if}
+    </div>
+
+    <!-- Overlay always in DOM, positioned absolutely -->
+    <div
+        class="hover-overlay"
+        class:visible={shouldShowOverlay()}
+        onclick={handleOverlayClick}
+        role="presentation"
+    >
+        <div class="overlay-content">
+            <h3 class="overlay-title">{media.title}</h3>
+
+            {#if getMediaType(media) === "movie"}
+                {@const movie = media as Movie}
+                <div class="info-group">
+                    {#if movie.director}
+                        <div class="info-row">
+                            <span class="info-label">Director:</span>
+                            <span class="info-value">{movie.director}</span>
+                        </div>
                     {/if}
-                </h3>
-            </div>
-            {#if media.rating}
-                <p class="media-rating">★ {media.rating.toFixed(1)}</p>
+                    {#if movie.release_year}
+                        <div class="info-row">
+                            <span class="info-label">Year:</span>
+                            <span class="info-value">{movie.release_year}</span>
+                        </div>
+                    {/if}
+                    {#if movie.rating}
+                        <div class="info-row">
+                            <span class="info-label">Rating:</span>
+                            <span class="info-value rating-value"
+                                >★ {movie.rating.toFixed(1)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if movie.watched_date}
+                        <div class="info-row">
+                            <span class="info-label">Watched:</span>
+                            <span class="info-value"
+                                >{formatDate(movie.watched_date)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if movie.notes}
+                        <div class="info-row">
+                            <span class="info-label">Notes:</span>
+                            <span class="info-value notes">{movie.notes}</span>
+                        </div>
+                    {/if}
+                </div>
+            {:else if getMediaType(media) === "series"}
+                {@const series = media as TVSeries}
+                <div class="info-group">
+                    {#if series.release_year}
+                        <div class="info-row">
+                            <span class="info-label">Year:</span>
+                            <span class="info-value">{series.release_year}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.status}
+                        <div class="info-row">
+                            <span class="info-label">Status:</span>
+                            <span class="info-value status"
+                                >{series.status}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.total_seasons}
+                        <div class="info-row">
+                            <span class="info-label">Total Seasons:</span>
+                            <span class="info-value"
+                                >{series.total_seasons}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.current_season}
+                        <div class="info-row">
+                            <span class="info-label">Current Season:</span>
+                            <span class="info-value"
+                                >{series.current_season}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.current_episode}
+                        <div class="info-row">
+                            <span class="info-label">Current Episode:</span>
+                            <span class="info-value"
+                                >{series.current_episode}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.rating}
+                        <div class="info-row">
+                            <span class="info-label">Rating:</span>
+                            <span class="info-value rating-value"
+                                >★ {series.rating.toFixed(1)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.started_date}
+                        <div class="info-row">
+                            <span class="info-label">Started:</span>
+                            <span class="info-value"
+                                >{formatDate(series.started_date)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.completed_date}
+                        <div class="info-row">
+                            <span class="info-label">Completed:</span>
+                            <span class="info-value"
+                                >{formatDate(series.completed_date)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if series.notes}
+                        <div class="info-row">
+                            <span class="info-label">Notes:</span>
+                            <span class="info-value notes">{series.notes}</span>
+                        </div>
+                    {/if}
+                </div>
+            {:else}
+                {@const book = media as Book}
+                <div class="info-group">
+                    {#if book.author}
+                        <div class="info-row">
+                            <span class="info-label">Author:</span>
+                            <span class="info-value">{book.author}</span>
+                        </div>
+                    {/if}
+                    {#if book.isbn}
+                        <div class="info-row">
+                            <span class="info-label">ISBN:</span>
+                            <span class="info-value">{book.isbn}</span>
+                        </div>
+                    {/if}
+                    {#if book.genre}
+                        <div class="info-row">
+                            <span class="info-label">Genre:</span>
+                            <span class="info-value">{book.genre}</span>
+                        </div>
+                    {/if}
+                    {#if book.pages}
+                        <div class="info-row">
+                            <span class="info-label">Pages:</span>
+                            <span class="info-value">{book.pages}</span>
+                        </div>
+                    {/if}
+                    {#if book.rating}
+                        <div class="info-row">
+                            <span class="info-label">Rating:</span>
+                            <span class="info-value rating-value"
+                                >★ {book.rating.toFixed(1)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if book.started_date}
+                        <div class="info-row">
+                            <span class="info-label">Started:</span>
+                            <span class="info-value"
+                                >{formatDate(book.started_date)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if book.completed_date}
+                        <div class="info-row">
+                            <span class="info-label">Completed:</span>
+                            <span class="info-value"
+                                >{formatDate(book.completed_date)}</span
+                            >
+                        </div>
+                    {/if}
+                    {#if book.notes}
+                        <div class="info-row">
+                            <span class="info-label">Notes:</span>
+                            <span class="info-value notes">{book.notes}</span>
+                        </div>
+                    {/if}
+                </div>
             {/if}
         </div>
-    {/if}
+
+        <div class="overlay-actions">
+            {#if onEdit}
+                <button
+                    class="action-btn edit-btn"
+                    onclick={(e) => {
+                        handleButtonClick(e);
+                        onEdit?.(media);
+                    }}
+                >
+                    Edit
+                </button>
+            {/if}
+            {#if onDelete}
+                <button
+                    class="action-btn delete-btn"
+                    onclick={(e) => {
+                        handleButtonClick(e);
+                        onDelete?.(media);
+                    }}
+                >
+                    Delete
+                </button>
+            {/if}
+        </div>
+    </div>
 </div>
 
 <style>
@@ -356,6 +401,14 @@
         flex-direction: column;
         gap: 8px;
         flex-shrink: 0;
+        transition:
+            visibility 0.2s ease,
+            opacity 0.2s ease;
+    }
+
+    .media-info.invisible {
+        visibility: hidden;
+        opacity: 0;
     }
 
     .title-year {
@@ -398,16 +451,16 @@
         flex-direction: column;
         padding: 12px;
         z-index: 10;
-        animation: fadeIn 0.2s ease;
+        opacity: 0;
+        visibility: hidden;
+        transition:
+            opacity 0.2s ease,
+            visibility 0.2s ease;
     }
 
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-        }
-        to {
-            opacity: 1;
-        }
+    .hover-overlay.visible {
+        opacity: 1;
+        visibility: visible;
     }
 
     .overlay-content {
