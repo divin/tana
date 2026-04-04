@@ -22,7 +22,8 @@
 
     // Auto-close details when another card is tapped
     $effect(() => {
-        if (!isHovered && isTouched && isTouchDevice) {
+        const hovered = isHovered ?? false;
+        if (!hovered && isTouched && isTouchDevice) {
             isTouched = false;
         }
     });
