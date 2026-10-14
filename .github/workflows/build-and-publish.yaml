@@ -80,7 +80,8 @@ jobs:
 
   publish:
     name: Publish GHCR image
-    if: github.event_name == 'push'
+    # Only tag pushes create images; pushes to main run verify only.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -105,26 +106,17 @@ jobs:
         shell: bash
         env:
           REPOSITORY: ${{ github.repository }}
-          REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           package_version="$(python3 -c 'import tomllib; print(tomllib.load(open("backend/pyproject.toml", "rb"))["project"]["version"])')"
           owner="${REPOSITORY%%/*}"
           owner="$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"
           image="ghcr.io/${owner}/tana"
-          short_sha="${COMMIT_SHA:0:7}"
-          if [[ "$REF_TYPE" == "branch" && "$REF_NAME" == "main" ]]; then
-            tags="${image}:latest,${image}:${short_sha}"
-          elif [[ "$REF_TYPE" == "tag" && "$REF_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            if [[ "$REF_NAME" != "$package_version" ]]; then
-              echo "Git tag ${REF_NAME} does not match backend package version ${package_version}" >&2
-              exit 1
-            fi
-            tags="${image}:${REF_NAME},${image}:${short_sha}"
+          if [[ "$REF_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] && [[ "$REF_NAME" == "$package_version" ]]; then
+            tags="${image}:latest,${image}:${REF_NAME}"
           else
-            echo "Ref is not main or a plain semantic version (X.Y.Z); refusing to publish" >&2
+            echo "Tag ${REF_NAME} is not a plain semantic version matching backend package version ${package_version}; refusing to publish" >&2
             exit 1
           fi
           echo "image=${image}" >> "$GITHUB_OUTPUT"

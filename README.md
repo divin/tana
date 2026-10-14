@@ -26,7 +26,7 @@ Tana has no user login. Only expose it to a trusted LAN or place it behind an au
    - `JELLYFIN_API_KEY`: create one in Jellyfin under **Dashboard → API Keys**. Give it a name such as `Tana` and copy the generated key into `.env`; never commit or share it.
 
    If you fork or adapt the example, also adjust the values in the `environment:` block — `JELLYFIN_URL` is the base URL for your Jellyfin server that is reachable from inside the Tana container (in Compose, `localhost` points to Tana itself, so use a LAN address, a Compose service name, or a host-gateway alias), `JELLYFIN_USER_ID` is the Jellyfin user whose watched history to track, `TZ` is an IANA timezone such as `Europe/Berlin`, and `PLAYBACK_COMPLETION_THRESHOLD` (optional) is the fraction of runtime between `0.5` and `1.0` that a stop must reach to count as watched when Jellyfin's `PlayedToCompletion` flag is not set (default `1.0`).
-2. `docker-compose.yaml` already points at `ghcr.io/divin/tana`. Use `:latest` to follow the `main` build, or edit `image:` to a plain version tag such as `:1.0.0` for a release. To choose another data location, change the **left side** of `./tana-data:/data` to the directory on your server; the container path on the right must stay `/data`.
+2. `docker-compose.yaml` already points at `ghcr.io/divin/tana`. Images are published only when a plain version tag such as `1.0.0` is pushed; `:latest` always points at the newest tagged release. To pin a specific release, edit `image:` to a plain version tag such as `:1.0.0`. To choose another data location, change the **left side** of `./tana-data:/data` to the directory on your server; the container path on the right must stay `/data`.
 3. Create the host data directory and make it writable by the container's non-root UID/GID `10001:10001` (on Linux):
 
    ```sh
@@ -42,7 +42,7 @@ Tana has no user login. Only expose it to a trusted LAN or place it behind an au
    docker compose logs -f tana
    ```
 
-   The Compose file is the end-user deployment example and always pulls the published image from GHCR; it does not build from source. For local development from a checkout, use `just run` instead (see Development). Choose the desired tag by editing `image:` in `docker-compose.yaml` (for example `:1.0.0` for a release instead of `:latest`).
+   The Compose file is the end-user deployment example and always pulls the published image from GHCR; it does not build from source. Images are published only on version-tag pushes (`:latest` tracks the newest tag), so pull after `git tag`-driven releases. For local development from a checkout, use `just run` instead (see Development). Choose the desired tag by editing `image:` in `docker-compose.yaml` (for example `:0.9.0` for a specific release instead of `:latest`).
 
 The container listens on port `8000`. The Compose example publishes `8000:8000` on host interfaces, so configure your firewall to allow only trusted devices/networks. GitHub Container Registry packages are private by default when first published: to let a server pull without credentials, open the package settings on GitHub and change its visibility to Public. Otherwise, authenticate Docker on the server with a GitHub token that has `read:packages` access before pulling. The database is stored inside the container at `/data/tana.sqlite3`; resized poster files are in `/data/posters`. The volume mapping keeps both across container replacement. Without it, both are ephemeral.
 
