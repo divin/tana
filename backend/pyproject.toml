@@ -1,0 +1,38 @@
+[project]
+name = "tana"
+version = "0.9.0"
+description = "A Jellyfin watch-history tracker"
+readme = "README.md"
+authors = [
+    { name = "divin", email = "71128266+divin@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "apscheduler>=3,<4",
+    "fastapi>=0.143.0",
+    "httpx>=0.28.1",
+    "pillow>=12.3.0",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.4",
+    "sqlalchemy[asyncio]>=2.1.4",
+    "sqlmodel>=0.0.48",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+tana = "tana:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]

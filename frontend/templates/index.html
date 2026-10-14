@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Tana — Watched media{% endblock title %}
+
+{% block content %}
+  <div id="tana-app">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Tana</p>
+        <h1>{{ section.title }}</h1>
+      </div>
+      <div class="header-actions">
+        <p id="sync-status" class="sync-status" role="status" aria-live="polite">Checking sync status…</p>
+        <div class="theme-field">
+          <label for="theme-select">Appearance</label>
+          <select id="theme-select" name="theme">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="green">Green</option>
+            <option value="rose">Rose</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <section class="statistics" aria-labelledby="stats-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Your watch history</p>
+          <h2 id="stats-heading">Statistics</h2>
+        </div>
+        <p id="stats-loading" class="subtle" role="status" hidden>Loading statistics…</p>
+      </div>
+      <div class="stats-grid" aria-live="polite">
+        <article class="stat-card">
+          <h3>Movies</h3>
+          <p id="stat-movies" class="stat-value">0</p>
+          <p id="stat-movies-recent" class="stat-recent"></p>
+        </article>
+        <article class="stat-card">
+          <h3>TV episodes</h3>
+          <p id="stat-episodes" class="stat-value">0</p>
+          <p id="stat-episodes-recent" class="stat-recent"></p>
+        </article>
+        <article class="stat-card">
+          <h3>TV series</h3>
+          <p id="stat-series" class="stat-value">0</p>
+          <p id="stat-series-recent" class="stat-recent"></p>
+        </article>
+        <article class="stat-card">
+          <h3>Total items</h3>
+          <p id="stat-total" class="stat-value">0</p>
+          <p class="stat-recent stat-recent-spacer" aria-hidden="true"></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="activity" aria-labelledby="activity-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Daily activity</p>
+          <h2 id="activity-heading">Completed plays</h2>
+        </div>
+        <p id="activity-loading" class="subtle" role="status" hidden>Loading activity…</p>
+      </div>
+      <div id="activity-scroll" class="activity-scroll" tabindex="0" role="region" aria-label="Watched-item activity during the last 365 local days">
+        <table id="activity-grid" class="activity-grid">
+          <caption class="visually-hidden">Each square counts a completed movie or episode playback on that local date, including completed rewatches; partial plays are not counted.</caption>
+        </table>
+      </div>
+      <div class="activity-footer">
+        <p id="activity-summary" class="subtle" aria-live="polite"></p>
+        <p class="activity-legend" aria-label="Activity color legend">
+          <span>Less</span>
+          <span class="activity-cell activity-level-0" aria-hidden="true"></span>
+          <span class="activity-cell activity-level-1" aria-hidden="true"></span>
+          <span class="activity-cell activity-level-2" aria-hidden="true"></span>
+          <span class="activity-cell activity-level-3" aria-hidden="true"></span>
+          <span class="activity-cell activity-level-4" aria-hidden="true"></span>
+          <span>More</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="library" aria-labelledby="library-heading">
+      <div class="section-heading library-heading">
+        <div>
+          <p class="eyebrow">Browse</p>
+          <h2 id="library-heading">Watched media</h2>
+        </div>
+        <p id="result-count" class="result-count" aria-live="polite">Loading results…</p>
+      </div>
+
+      <form id="filters" class="filters">
+        <div class="filter-field">
+          <label for="kind-filter">Media type</label>
+          <select id="kind-filter" name="kind">
+            <option value="all">All media</option>
+            <option value="movie">Movies</option>
+            <option value="tv">TV episodes</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="start-date">From date</label>
+          <input id="start-date" name="start_date" type="date" aria-describedby="filter-error">
+        </div>
+        <div class="filter-field">
+          <label for="end-date">Through date</label>
+          <input id="end-date" name="end_date" type="date" aria-describedby="filter-error">
+        </div>
+        <button id="clear-filters" class="button button-secondary" type="button">Clear filters</button>
+        <p id="filter-error" class="filter-error" role="alert" hidden></p>
+      </form>
+
+      <p id="media-loading" class="loading-state" role="status" aria-live="polite" hidden>Loading watched media…</p>
+      <div id="error-state" class="error-state" role="alert" hidden>
+        <p id="error-message">Some data could not be loaded.</p>
+        <button id="retry-button" class="button" type="button">Retry</button>
+      </div>
+      <p id="empty-state" class="empty-state" hidden>No watched media found.</p>
+      <div id="media-list" class="media-list" aria-live="polite"></div>
+
+      <nav class="pagination" aria-label="Media pages">
+        <button id="previous-page" class="button button-secondary" type="button" disabled>Previous</button>
+        <span id="page-indicator" class="page-indicator">Page 1</span>
+        <button id="next-page" class="button button-secondary" type="button" disabled>Next</button>
+      </nav>
+    </section>
+  </div>
+{% endblock content %}

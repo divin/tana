@@ -1,0 +1,5 @@
+base_url = "http://localhost:8000/"
+title = "Tana"
+compile_sass = true
+generate_sitemap = false
+build_search_index = false

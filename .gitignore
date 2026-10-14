@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# Other
+PLAN.md
+spec/
+
+# Virtual environments
+.venv/
+
+# Local secrets/configuration; keep example.env tracked
+.env
+
+# Zola output is generated during builds
+/frontend/public/
+
+# Local databases and frontend installs
+.local-data/
+/tana-data/
+*.sqlite3
+*.sqlite3-*
+*.db
+node_modules/

@@ -1,0 +1,17 @@
+services:
+  tana:
+    image: ghcr.io/divin/tana:latest
+    restart: unless-stopped
+    environment:
+      JELLYFIN_URL: ${JELLYFIN_URL:?Set JELLYFIN_URL in .env}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:?Set JELLYFIN_API_KEY in .env}
+      JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:?Set JELLYFIN_USER_ID in .env}
+      TZ: ${TZ:-Europe/Berlin}
+      SYNC_TIME: ${SYNC_TIME:-03:00}
+      PLAYBACK_COMPLETION_THRESHOLD: ${PLAYBACK_COMPLETION_THRESHOLD:-0.9}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./tana-data:/data
+    stop_grace_period: 35s
