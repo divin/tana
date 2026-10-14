@@ -30,8 +30,14 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install locked Python tooling
-        run: python -m pip install uv==0.12.23
+      # uv is installed via the official astral-sh/setup-uv action, pinned to
+      # the exact release used by the Dockerfile build stage. Keep the version
+      # here, in the Dockerfile, and in the lockfile in sync when bumping.
+      # astral-sh/setup-uv v10.3.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.12.23"
+          enable-cache: false
 
       - name: Install pinned Zola 0.23.6
         shell: bash
