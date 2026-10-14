@@ -97,10 +97,14 @@ async def test_client_requests_both_item_types_with_verified_auth_and_fields() -
     assert calls[0].url.params["fields"] == "ProviderIds"
     assert calls[0].url.params["startIndex"] == "0"
     assert calls[0].url.params["limit"] == "500"
-    assert calls[0].headers["Authorization"] == (
-        'MediaBrowser Client="Tana", Device="Tana server", DeviceId="tana", '
-        'Version="0.1.0", Token="unit-test-key"'
+    assert (
+        calls[0]
+        .headers["Authorization"]
+        .startswith(
+            'MediaBrowser Client="Tana", Device="Tana server", DeviceId="tana", Version="'
+        )
     )
+    assert '", Token="unit-test-key"' in calls[0].headers["Authorization"]
     assert "X-Emby-Token" not in calls[0].headers
     assert items[0].title == "Example movie"
     assert items[0].poster_tag == "primary-tag"

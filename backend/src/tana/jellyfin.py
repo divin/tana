@@ -7,6 +7,7 @@ import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from importlib.metadata import version as _package_version
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -18,6 +19,10 @@ from tana.config import Settings
 
 logger = logging.getLogger(__name__)
 PAGE_SIZE = 500
+
+# The Jellyfin client "Version" advertises the installed package version so the
+# header never drifts from pyproject.toml.
+_TANA_VERSION = _package_version("tana")
 MAX_ATTEMPTS = 3
 MAX_POSTER_BYTES = 10 * 1024 * 1024
 IMDB_ID_PATTERN = re.compile(r"tt[0-9]+\Z")
@@ -74,7 +79,7 @@ class JellyfinClient:
         return {
             "Authorization": (
                 'MediaBrowser Client="Tana", Device="Tana server", '
-                f'DeviceId="tana", Version="0.1.0", Token="{token}"'
+                f'DeviceId="tana", Version="{_TANA_VERSION}", Token="{token}"'
             ),
             "Accept": "application/json",
         }

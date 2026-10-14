@@ -1,40 +1,33 @@
-# Tana
+# Tana 🎬
 
-A Jellyfin watch-history tracker. The backend is in `backend/` and the Zola site is in `frontend/`; see [`spec/README.md`](spec/README.md) and [`spec/roadmap.md`](spec/roadmap.md) for the implementation contract and release plan.
+**Tana is a privacy-friendly, self-hosted watch-history tracker for Jellyfin.** It records completed movie and episode plays server-side from Jellyfin's Playback Stop webhook, stores play counts and timestamps in a local SQLite database, and serves a small web UI with statistics, filters, and poster images. All data stays on your own host; the only outbound traffic is to your Jellyfin server for metadata and posters.
 
-## Development
+AI tools were used during development.
 
-Install Python 3.12, [`uv`](https://docs.astral.sh/uv/), Zola 0.23.6, Node.js 22, and [`just`](https://just.systems/). Zola builds the static site directly; no npm install is needed.
+## 🧭 How it works
 
-Copy `example.env` to `.env` if you do not already have one, then set `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `JELLYFIN_USER_ID`, and `TZ`. The `.env` file is local configuration and is ignored by Git. For development with `just run`, keep the full set in `.env`; for Docker Compose deployments, non-secret settings are read from the `environment:` block in `docker-compose.yaml` and only `JELLYFIN_API_KEY` is required in `.env`.
-
-From the repository root:
-
-```sh
-just sync  # Install the locked backend environment
-just       # Run checks and tests
-just run   # Build the site and start a LAN-accessible local server on port 8000
+```mermaid
+flowchart LR
+    A[Jellyfin] -->|Playback Stop webhook| B[Completion receiver]
+    B --> C[(SQLite database)]
+    D[Jellyfin metadata sync] --> C
+    C --> E[Web UI]
+    E -. poster fetch .-> A
 ```
 
-`just run` refreshes Jellyfin metadata and stores its local test database/posters in the ignored `.local-data/` directory, leaving the production container path `/data` untouched. The history starts empty; only successful completion webhooks create watched items. Configure Jellyfin's Webhook plugin as described in [`docs/jellyfin-webhook.md`](docs/jellyfin-webhook.md). Stop it with Ctrl+C. It binds to `0.0.0.0:8000`, so you can open `http://<computer-lan-ip>:8000` from another device on your trusted LAN. The app has no login; only run it on a trusted network and allow the port through your firewall only as needed. Remove `.local-data/` to discard the test copy.
+Playback completion events are the only source of watched rows and counts. Tana never imports Jellyfin's `Played` history or `PlayCount`: tracking starts empty, and only the configured user's finished plays create rows. A webhook receiver stores accepted events, a daily sync refreshes poster and IMDb metadata from Jellyfin, and the Zola-built UI renders stats and media.
 
-## Docker Compose deployment
+## 🚀 Quick start
 
-Tana has no user login. Only expose it to a trusted LAN or place it behind an authenticated reverse proxy; do not expose it directly to the public internet.
-
-1. Install Docker Engine/Desktop with the Compose plugin. Non-secret configuration is set directly in `docker-compose.yaml` under `environment:` (Jellyfin URL, user ID, timezone, sync time, completion threshold, log level). The only value that must live in `.env` is the API key: copy `example.env` to `.env` if you have not already done so, then set
-   - `JELLYFIN_API_KEY`: create one in Jellyfin under **Dashboard → API Keys**. Give it a name such as `Tana` and copy the generated key into `.env`; never commit or share it.
-
-   If you fork or adapt the example, also adjust the values in the `environment:` block — `JELLYFIN_URL` is the base URL for your Jellyfin server that is reachable from inside the Tana container (in Compose, `localhost` points to Tana itself, so use a LAN address, a Compose service name, or a host-gateway alias), `JELLYFIN_USER_ID` is the Jellyfin user whose watched history to track, `TZ` is an IANA timezone such as `Europe/Berlin`, and `PLAYBACK_COMPLETION_THRESHOLD` (optional) is the fraction of runtime between `0.5` and `1.0` that a stop must reach to count as watched when Jellyfin's `PlayedToCompletion` flag is not set (default `1.0`).
-2. `docker-compose.yaml` already points at `ghcr.io/divin/tana`. Images are published only when a plain version tag such as `1.0.0` is pushed; `:latest` always points at the newest tagged release. To pin a specific release, edit `image:` to a plain version tag such as `:1.0.0`. To choose another data location, change the **left side** of `./tana-data:/data` to the directory on your server; the container path on the right must stay `/data`.
-3. Create the host data directory and make it writable by the container's non-root UID/GID `10001:10001` (on Linux):
+1. Copy `example.env` to `.env` and set `JELLYFIN_API_KEY` (create one in Jellyfin under **Dashboard → API Keys**) and `JELLYFIN_USER_ID`. `JELLYFIN_URL` defaults to `http://jellyfin:8096` in Compose; adjust it to an address reachable from the Tana container. Non-secret settings live in the `environment:` block of `docker-compose.yaml`; only the API key is required in `.env`.
+2. Create the host data directory. Compose runs the container as non-root UID/GID `10001:10001`, and the mounted `/data` directory must be writable by it:
 
    ```sh
    mkdir -p ./tana-data
    sudo chown -R 10001:10001 ./tana-data
    ```
 
-4. Start Tana:
+3. Start and follow the logs:
 
    ```sh
    docker compose pull
@@ -42,26 +35,28 @@ Tana has no user login. Only expose it to a trusted LAN or place it behind an au
    docker compose logs -f tana
    ```
 
-   The Compose file is the end-user deployment example and always pulls the published image from GHCR; it does not build from source. Images are published only on version-tag pushes (`:latest` tracks the newest tag), so pull after `git tag`-driven releases. For local development from a checkout, use `just run` instead (see Development). Choose the desired tag by editing `image:` in `docker-compose.yaml` (for example `:0.9.0` for a specific release instead of `:latest`).
+The example Compose file pulls the published `ghcr.io/divin/tana` image; no local Docker build is needed. It maps host port `8000` to container port `8000` on all host interfaces. Tana has no login, so only expose it to a trusted LAN or place it behind an authenticated reverse proxy, and keep the webhook endpoint private. Containers are published only on plain version tags; `:latest` always points at the newest tagged release, so `docker compose pull` after a release updates the running image.
 
-The container listens on port `8000`. The Compose example publishes `8000:8000` on host interfaces, so configure your firewall to allow only trusted devices/networks. GitHub Container Registry packages are private by default when first published: to let a server pull without credentials, open the package settings on GitHub and change its visibility to Public. Otherwise, authenticate Docker on the server with a GitHub token that has `read:packages` access before pulling. The database is stored inside the container at `/data/tana.sqlite3`; resized poster files are in `/data/posters`. The volume mapping keeps both across container replacement. Without it, both are ephemeral.
+## 🎬 Watch tracking
 
-### Backup and restore
+Tana records a movie or episode as watched only when Jellyfin sends a `PlaybackStop` event for the single user in `JELLYFIN_USER_ID` with `PlayedToCompletion=true` — or, when that flag is missing, when the stop reached `PLAYBACK_COMPLETION_THRESHOLD` (default `1.0`; valid `0.5`–`1.0`) of the runtime. Starts, progress, incomplete stops, and duplicate deliveries never increment counts; the first completion is one play and later completions count as rewatches. Configure Jellyfin's Webhook plugin as described in [Jellyfin webhook setup](docs/jellyfin-webhook.md).
 
-Back up the complete mapped host data directory so the database and poster cache remain together. For a simple consistent offline backup:
+## 📊 Web UI
+
+Tana's index page shows total plays and activity over time, watched media with posters, rewatch labels, IMDb links for movies, date and kind filters, and 7/30-day statistics. Timeline data respects the configured `TZ`. The theme choice is stored locally in the browser.
+
+## 💾 Data and privacy
+
+The SQLite database and resized poster files live together under the mapped host directory, so back them up together (for example stop the container and `tar -czf` the directory; Tana recreates posters on demand if the `posters/` folder is removed). Webhook bodies, item IDs, and secrets are never logged. Tana only talks to its configured Jellyfin server; it reports nowhere else.
+
+## 🧪 Development
+
+Use Python 3.12, [`uv`](https://docs.astral.sh/uv/), Zola 0.23.6, Node.js 22, and [`just`](https://just.systems/). Copy `example.env` to `.env` (gitignored) for local runs, then from the repository root:
 
 ```sh
-docker compose stop tana
-tar -czf tana-data-backup.tar.gz -C ./tana-data .
-docker compose start tana
+just sync  # Install the locked backend environment
+just       # Run all checks and tests
+just run   # Build the site and start a LAN-accessible server on port 8000
 ```
 
-To restore, stop the container, replace the contents of the mapped directory from the backup, restore writable ownership for UID/GID `10001:10001`, then start the service. Removing `/data/posters` alone is safe; Tana will fetch posters again on demand. Protect backups as personal data.
-
-### Jellyfin webhook
-
-Configure the Generic Destination after the webhook receiver is present in the deployed image. Use the exact fields and delivery behavior in [Jellyfin webhook setup](docs/jellyfin-webhook.md). No webhook auth token is required; restrict access to Tana to your trusted LAN.
-
-### Upgrade
-
-Change the image tag in Compose to the desired plain version (for example `1.0.0`), then run `docker compose pull` and `docker compose up -d`. Keep the `/data` mapping unchanged. The service currently uses schema version 3; future database schema changes will include explicit migrations and upgrade instructions.
+`just run` stores its database and posters in the ignored `.local-data/` directory and leaves the production `/data` path untouched. Remove `.local-data/` to discard the test copy.
