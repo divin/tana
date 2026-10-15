@@ -1,6 +1,6 @@
 # Tana 🎬
 
-**Tana is a privacy-friendly, self-hosted watch-history tracker for Jellyfin.** It records completed movie and episode plays server-side from Jellyfin's Playback Stop webhook, stores play counts and timestamps in a local SQLite database, and serves a small web UI with statistics, filters, and poster images. All data stays on your own host; the only outbound traffic is to your Jellyfin server for metadata and posters.
+**Tana (棚, たな, “shelf” in Japanese) is a privacy-friendly, self-hosted watch-history tracker for Jellyfin.** It records completed movie and episode plays server-side from Jellyfin's Playback Stop webhook, stores play counts and timestamps in a local SQLite database, and serves a small web UI with statistics, filters, and poster images. All data stays on your own host; the only outbound traffic is to your Jellyfin server for metadata and posters.
 
 AI tools were used during development.
 
