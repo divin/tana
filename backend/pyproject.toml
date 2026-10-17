@@ -1,6 +1,6 @@
 [project]
 name = "tana"
-version = "2.0.2"
+version = "2.0.3"
 description = "A Jellyfin watch-history tracker"
 readme = "README.md"
 authors = [

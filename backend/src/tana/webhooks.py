@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -79,6 +80,8 @@ def _event_kind(payload: dict[str, Any]) -> str | None:
             return "start"
         if normalized in {"playbackstop", "stop", "playbackstopped"}:
             return "stop"
+        if normalized == "playbackprogress":
+            return "progress"
     return None
 
 
@@ -177,7 +180,10 @@ def _expected_user_id(configured_user_id: str) -> str:
 
 
 def parse_completion_notice(
-    payload: Any, configured_user_id: str, completion_threshold: float = 1.0
+    payload: Any,
+    configured_user_id: str,
+    completion_threshold: float = 1.0,
+    prior_progress: tuple[int, int] | None = None,
 ) -> CompletionNotice | None:
     if not isinstance(payload, dict):
         raise WebhookPayloadError("Webhook JSON must be an object")
@@ -219,6 +225,18 @@ def parse_completion_notice(
         _payload_value(payload, "PlaybackPositionTicks"), "PlaybackPositionTicks"
     )
     run_time = _optional_int(_payload_value(payload, "RunTimeTicks"), "RunTimeTicks")
+    if prior_progress is not None:
+        prior_position, prior_runtime = prior_progress
+        current_ratio = (
+            position / run_time
+            if position is not None and run_time is not None and run_time > 0
+            else -1.0
+        )
+        prior_ratio = prior_position / prior_runtime if prior_runtime > 0 else -1.0
+        if prior_ratio > current_ratio:
+            position = prior_position
+        if run_time is None or run_time <= 0:
+            run_time = prior_runtime
     completed = played_to_completion or (
         position is not None
         and run_time is not None
@@ -329,14 +347,26 @@ class WebhookService:
         self.completion_threshold = completion_threshold
         self.jellyfin = jellyfin
         self._lock = asyncio.Lock()
+        self._session_progress: dict[tuple[str, str, str], tuple[int, int, float]] = {}
 
     async def handle_json(self, body: bytes) -> bool:
         try:
             payload = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise WebhookPayloadError("Malformed webhook JSON") from None
+        if isinstance(payload, dict) and _event_kind(payload) == "progress":
+            async with self._lock:
+                self._remember_progress(payload)
+            return False
+        prior_progress = None
+        if isinstance(payload, dict) and _event_kind(payload) == "stop":
+            async with self._lock:
+                prior_progress = self._take_progress(payload)
         notice = parse_completion_notice(
-            payload, self.configured_user_id, self.completion_threshold
+            payload,
+            self.configured_user_id,
+            self.completion_threshold,
+            prior_progress,
         )
         if notice is not None:
             async with self._lock:
@@ -351,10 +381,78 @@ class WebhookService:
             if not recorded:
                 logger.info("Ignored Jellyfin webhook: reason=duplicate_or_stale_start")
             return recorded
-        self._log_ignored(payload)
+        self._log_ignored(payload, prior_progress)
         return False
 
-    def _log_ignored(self, payload: Any) -> None:
+    def _progress_key(self, payload: Any) -> tuple[str, str, str] | None:
+        if not isinstance(payload, dict):
+            return None
+        try:
+            user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
+            if user_id != _expected_user_id(self.configured_user_id):
+                return None
+            item_type = _payload_value(payload, "ItemType")
+            if (
+                not isinstance(item_type, str)
+                or item_type.strip().title() not in SUPPORTED_TYPES
+            ):
+                return None
+            jellyfin_id = _canonical_uuid(_payload_value(payload, "ItemId"), "ItemId")
+        except WebhookPayloadError:
+            return None
+        session_id = _payload_value(payload, "SessionId")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return None
+        return (user_id, jellyfin_id, session_id.strip())
+
+    def _remember_progress(self, payload: dict[str, Any]) -> None:
+        key = self._progress_key(payload)
+        if key is None:
+            return
+        try:
+            position = _optional_int(
+                _payload_value(payload, "PlaybackPositionTicks"),
+                "PlaybackPositionTicks",
+            )
+            runtime = _optional_int(
+                _payload_value(payload, "RunTimeTicks"), "RunTimeTicks"
+            )
+        except WebhookPayloadError:
+            return
+        if position is None or runtime is None or runtime == 0:
+            return
+
+        now = time.monotonic()
+        for expired_key, (_, _, updated_at) in tuple(self._session_progress.items()):
+            if now - updated_at > 6 * 60 * 60:
+                del self._session_progress[expired_key]
+        previous = self._session_progress.pop(key, None)
+        if previous is not None:
+            previous_position, previous_runtime, _ = previous
+            if (
+                previous_runtime > 0
+                and previous_position / previous_runtime > position / runtime
+            ):
+                position, runtime = previous_position, previous_runtime
+        elif len(self._session_progress) >= 1024:
+            self._session_progress.pop(next(iter(self._session_progress)))
+        self._session_progress[key] = (position, runtime, now)
+
+    def _take_progress(self, payload: dict[str, Any]) -> tuple[int, int] | None:
+        key = self._progress_key(payload)
+        if key is None:
+            return None
+        snapshot = self._session_progress.pop(key, None)
+        if snapshot is None:
+            return None
+        position, runtime, updated_at = snapshot
+        if time.monotonic() - updated_at > 6 * 60 * 60:
+            return None
+        return position, runtime
+
+    def _log_ignored(
+        self, payload: Any, prior_progress: tuple[int, int] | None = None
+    ) -> None:
         if not isinstance(payload, dict):
             return
         event_kind = _event_kind(payload)
@@ -381,6 +479,11 @@ class WebhookService:
         )
         played_status = "n/a"
         progress_ratio = None
+        session_progress_ratio = (
+            prior_progress[0] / prior_progress[1]
+            if prior_progress is not None and prior_progress[1] > 0
+            else None
+        )
         if event_kind is None:
             reason = "unsupported_event"
         elif not user_matches:
@@ -406,6 +509,15 @@ class WebhookService:
                 and runtime > 0
                 else None
             )
+            if prior_progress is not None:
+                prior_position, prior_runtime = prior_progress
+                prior_ratio = (
+                    prior_position / prior_runtime if prior_runtime > 0 else None
+                )
+                if prior_ratio is not None and (
+                    progress_ratio is None or prior_ratio > progress_ratio
+                ):
+                    progress_ratio = prior_ratio
             reached_threshold = (
                 progress_ratio is not None
                 and progress_ratio >= self.completion_threshold
@@ -427,7 +539,8 @@ class WebhookService:
         logger.info(
             "Ignored Jellyfin webhook: event=%s event_name=%s reason=%s "
             "item_type=%s user_matches=%s played_to_completion=%s "
-            "playback_ratio=%s completion_threshold=%.2f",
+            "playback_ratio=%s session_progress_ratio=%s "
+            "completion_threshold=%.2f",
             event_kind or "unsupported",
             _event_label(payload),
             reason,
@@ -435,6 +548,9 @@ class WebhookService:
             user_matches,
             played_status,
             f"{progress_ratio:.3f}" if progress_ratio is not None else "unavailable",
+            f"{session_progress_ratio:.3f}"
+            if session_progress_ratio is not None
+            else "unavailable",
             self.completion_threshold,
         )
 

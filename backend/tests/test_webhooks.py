@@ -210,6 +210,58 @@ async def test_generic_destination_accepts_spaced_playback_start_name(
 
 
 @pytest.mark.asyncio
+async def test_progress_only_counts_when_stop_confirms_the_session_threshold(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path, completion_threshold=0.9)
+    progress_payload = {
+        "NotificationType": "PlaybackProgress",
+        "UserId": USER_ID,
+        "ItemId": MOVIE_ID,
+        "ItemType": "Movie",
+        "Name": "Completed movie",
+        "SessionId": "progress-session",
+        "PlaybackPositionTicks": 9_500_000_000,
+        "RunTimeTicks": 10_000_000_000,
+    }
+    stop_payload = movie_event(
+        session_id="progress-session",
+        complete=False,
+        position_ticks=0,
+        run_time_ticks=10_000_000_000,
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        progress = await client.post("/api/webhooks/jellyfin", json=progress_payload)
+        before_stop = await client.get("/api/media")
+        other_session_stop = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(
+                session_id="different-session",
+                complete=False,
+                position_ticks=0,
+                run_time_ticks=10_000_000_000,
+            ),
+        )
+        after_other_session = await client.get("/api/media")
+        stopped = await client.post("/api/webhooks/jellyfin", json=stop_payload)
+        after_stop = await client.get("/api/media")
+
+    assert (
+        progress.status_code
+        == other_session_stop.status_code
+        == stopped.status_code
+        == 204
+    )
+    assert before_stop.json()["total"] == after_other_session.json()["total"] == 0
+    row = after_stop.json()["items"][0]
+    assert row["watch_status"] == "watched"
+    assert row["play_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_incomplete_wrong_user_and_other_notification_events_are_ignored(
     tmp_path: Path,
 ) -> None:
