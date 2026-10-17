@@ -129,6 +129,87 @@ async def test_completed_webhooks_create_and_increment_only_unique_plays(
 
 
 @pytest.mark.asyncio
+async def test_yamtrack_style_jellyfin_play_and_stop_payloads_are_tracked(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    previous_play = completion_time(days=-5)
+    nested_item = {
+        "Id": MOVIE_ID,
+        "Type": "Movie",
+        "Name": "Nested movie",
+        "RunTimeTicks": 10_000_000_000,
+        "UserData": {"Played": True, "LastPlayedDate": previous_play},
+    }
+    start_payload = {
+        "Event": "Play",
+        "User": {"Id": USER_ID},
+        "Item": nested_item,
+        "SessionId": "nested-session",
+    }
+    stop_payload = {
+        **start_payload,
+        "Event": "Stop",
+        "Timestamp": completion_time(days=1),
+        "Item": {
+            **nested_item,
+            "UserData": {
+                "Played": True,
+                "LastPlayedDate": completion_time(days=1),
+                "PlaybackPositionTicks": 10_000_000_000,
+            },
+        },
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        started = await client.post("/api/webhooks/jellyfin", json=start_payload)
+        started_media = await client.get("/api/media")
+        completed = await client.post("/api/webhooks/jellyfin", json=stop_payload)
+        duplicate = await client.post("/api/webhooks/jellyfin", json=stop_payload)
+        media = await client.get("/api/media")
+
+    assert started.status_code == completed.status_code == duplicate.status_code == 204
+    start_timestamp = started_media.json()["items"][0]["started_at"]
+    assert datetime.fromisoformat(start_timestamp) > datetime.fromisoformat(
+        previous_play
+    )
+    row = media.json()["items"][0]
+    assert row["id"] == CANONICAL_MOVIE_ID
+    assert row["title"] == "Nested movie"
+    assert row["watch_status"] == "watched"
+    assert row["play_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_destination_accepts_spaced_playback_start_name(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    payload = {
+        "NotificationType": "Playback Start",
+        "UserId": USER_ID,
+        "ItemId": MOVIE_ID,
+        "ItemType": "Movie",
+        "Name": "Started movie",
+        "UtcTimestamp": completion_time(),
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.post("/api/webhooks/jellyfin", json=payload)
+        media = await client.get("/api/media")
+
+    assert response.status_code == 204
+    row = media.json()["items"][0]
+    assert row["title"] == "Started movie"
+    assert row["watch_status"] == "started"
+    assert row["play_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_incomplete_wrong_user_and_other_notification_events_are_ignored(
     tmp_path: Path,
 ) -> None:

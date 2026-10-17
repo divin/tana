@@ -56,6 +56,71 @@ def _get(payload: dict[str, Any], field: str) -> Any:
     return None
 
 
+def _event_label(payload: dict[str, Any]) -> str:
+    for field in ("NotificationType", "Event"):
+        event = _get(payload, field)
+        if isinstance(event, str) and event.strip():
+            normalized = "".join(
+                character for character in event.casefold() if character.isalnum()
+            )
+            return normalized[:48] or "empty"
+    return "missing"
+
+
+def _event_kind(payload: dict[str, Any]) -> str | None:
+    for field in ("NotificationType", "Event"):
+        event = _get(payload, field)
+        if not isinstance(event, str):
+            continue
+        normalized = "".join(
+            character for character in event.casefold() if character.isalnum()
+        )
+        if normalized in {"playbackstart", "play", "playbackstarted"}:
+            return "start"
+        if normalized in {"playbackstop", "stop", "playbackstopped"}:
+            return "stop"
+    return None
+
+
+def _item(payload: dict[str, Any]) -> dict[str, Any]:
+    value = _get(payload, "Item")
+    return value if isinstance(value, dict) else {}
+
+
+def _nested(payload: dict[str, Any], group: str, field: str) -> Any:
+    value = _get(payload, group)
+    return _get(value, field) if isinstance(value, dict) else None
+
+
+def _payload_value(payload: dict[str, Any], field: str) -> Any:
+    value = _get(payload, field)
+    if value is not None:
+        return value
+    item = _item(payload)
+    value = _get(item, field)
+    if value is not None:
+        return value
+    if field == "UserId":
+        return _nested(payload, "User", "Id")
+    if field == "ItemId":
+        return _get(item, "Id")
+    if field == "ItemType":
+        return _get(item, "Type")
+    if field == "Name":
+        return _get(item, "Name")
+    if field == "UtcTimestamp":
+        return _get(payload, "Timestamp") or _get(payload, "Date")
+    if field == "PlayedToCompletion":
+        return _nested(item, "UserData", "Played")
+    if field == "PlaybackPositionTicks":
+        return _nested(item, "UserData", "PlaybackPositionTicks")
+    if field == "RunTimeTicks":
+        return _get(item, "RunTimeTicks")
+    if field == "Provider_imdb":
+        return _nested(item, "ProviderIds", "Imdb")
+    return None
+
+
 def _canonical_uuid(value: Any, field_name: str) -> str:
     if not isinstance(value, str):
         raise WebhookPayloadError(f"Missing or invalid {field_name}")
@@ -89,6 +154,13 @@ def _canonical_timestamp(value: Any) -> str:
     return format_utc(parsed)
 
 
+def _event_timestamp(payload: dict[str, Any], timestamp_value: Any = None) -> str:
+    value = timestamp_value or _payload_value(payload, "UtcTimestamp")
+    if not value and isinstance(_get(payload, "Event"), str):
+        value = format_utc(datetime.now(UTC))
+    return _canonical_timestamp(value)
+
+
 def _optional_int(value: Any, field_name: str) -> int | None:
     if value is None:
         return None
@@ -110,41 +182,43 @@ def parse_completion_notice(
     if not isinstance(payload, dict):
         raise WebhookPayloadError("Webhook JSON must be an object")
 
-    notification_type = _get(payload, "NotificationType")
-    if not isinstance(notification_type, str) or not notification_type:
-        raise WebhookPayloadError("Missing or invalid NotificationType")
-    if notification_type != "PlaybackStop":
+    if _event_kind(payload) != "stop":
         return None
 
-    played_to_completion = _get(payload, "PlayedToCompletion")
+    played_to_completion = _payload_value(payload, "PlayedToCompletion")
+    if played_to_completion is None:
+        played_to_completion = False
     if not isinstance(played_to_completion, bool):
-        raise WebhookPayloadError("Missing or invalid PlayedToCompletion")
+        raise WebhookPayloadError("Invalid PlayedToCompletion")
 
-    user_id = _canonical_uuid(_get(payload, "UserId"), "UserId")
+    user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
     if user_id != _expected_user_id(configured_user_id):
         return None
 
-    item_type = _get(payload, "ItemType")
+    item_type = _payload_value(payload, "ItemType")
     if not isinstance(item_type, str) or not item_type:
         raise WebhookPayloadError("Missing or invalid ItemType")
-    kind = SUPPORTED_TYPES.get(item_type)
+    kind = SUPPORTED_TYPES.get(item_type.strip().title())
     if kind is None:
         return None
 
-    jellyfin_id = _canonical_uuid(_get(payload, "ItemId"), "ItemId")
-    title = _get(payload, "Name")
+    jellyfin_id = _canonical_uuid(_payload_value(payload, "ItemId"), "ItemId")
+    title = _payload_value(payload, "Name")
     if not isinstance(title, str) or not title.strip():
         raise WebhookPayloadError("Missing or invalid Name")
-    completed_at = _canonical_timestamp(_get(payload, "UtcTimestamp"))
+    timestamp_value = _payload_value(payload, "UtcTimestamp")
+    if not timestamp_value and _event_kind(payload) == "stop":
+        timestamp_value = _nested(_item(payload), "UserData", "LastPlayedDate")
+    completed_at = _event_timestamp(payload, timestamp_value)
 
-    session_id_value = _get(payload, "SessionId")
+    session_id_value = _payload_value(payload, "SessionId")
     session_id = session_id_value.strip() if isinstance(session_id_value, str) else None
     if not session_id:
         session_id = None
     position = _optional_int(
-        _get(payload, "PlaybackPositionTicks"), "PlaybackPositionTicks"
+        _payload_value(payload, "PlaybackPositionTicks"), "PlaybackPositionTicks"
     )
-    run_time = _optional_int(_get(payload, "RunTimeTicks"), "RunTimeTicks")
+    run_time = _optional_int(_payload_value(payload, "RunTimeTicks"), "RunTimeTicks")
     completed = played_to_completion or (
         position is not None
         and run_time is not None
@@ -153,21 +227,25 @@ def parse_completion_notice(
     )
     if not completed:
         return None
-    series_title = _get(payload, "SeriesName")
+    series_title = _payload_value(payload, "SeriesName")
     if series_title is not None and not isinstance(series_title, str):
         raise WebhookPayloadError("Invalid SeriesName")
-    series_id = _optional_uuid(_get(payload, "SeriesId")) if kind == "tv" else None
+    series_id = (
+        _optional_uuid(_payload_value(payload, "SeriesId")) if kind == "tv" else None
+    )
     season_number = (
-        _optional_int(_get(payload, "SeasonNumber"), "SeasonNumber")
+        _optional_int(_payload_value(payload, "SeasonNumber"), "SeasonNumber")
         if kind == "tv"
         else None
     )
     episode_number = (
-        _optional_int(_get(payload, "EpisodeNumber"), "EpisodeNumber")
+        _optional_int(_payload_value(payload, "EpisodeNumber"), "EpisodeNumber")
         if kind == "tv"
         else None
     )
-    provider_imdb = _get(payload, "Provider_imdb") if kind == "movie" else None
+    provider_imdb = (
+        _payload_value(payload, "Provider_imdb") if kind == "movie" else None
+    )
     imdb_id = (
         provider_imdb.strip()
         if isinstance(provider_imdb, str)
@@ -178,7 +256,7 @@ def parse_completion_notice(
     canonical_fields = (
         user_id,
         jellyfin_id,
-        completed_at,
+        completed_at if timestamp_value or not session_id else "",
         session_id or "",
         str(position) if position is not None else "",
         item_type,
@@ -212,28 +290,24 @@ def parse_completion_notice(
 def parse_start_notice(payload: Any, configured_user_id: str) -> StartNotice | None:
     if not isinstance(payload, dict):
         raise WebhookPayloadError("Webhook JSON must be an object")
-
-    notification_type = _get(payload, "NotificationType")
-    if not isinstance(notification_type, str) or not notification_type:
-        raise WebhookPayloadError("Missing or invalid NotificationType")
-    if notification_type != "PlaybackStart":
+    if _event_kind(payload) != "start":
         return None
 
-    user_id = _canonical_uuid(_get(payload, "UserId"), "UserId")
+    user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
     if user_id != _expected_user_id(configured_user_id):
         return None
 
-    item_type = _get(payload, "ItemType")
+    item_type = _payload_value(payload, "ItemType")
     if not isinstance(item_type, str) or not item_type:
         raise WebhookPayloadError("Missing or invalid ItemType")
-    if item_type != "Movie":
+    if item_type.strip().title() != "Movie":
         return None
 
-    jellyfin_id = _canonical_uuid(_get(payload, "ItemId"), "ItemId")
-    title = _get(payload, "Name")
+    jellyfin_id = _canonical_uuid(_payload_value(payload, "ItemId"), "ItemId")
+    title = _payload_value(payload, "Name")
     if not isinstance(title, str) or not title.strip():
         raise WebhookPayloadError("Missing or invalid Name")
-    started_at = _canonical_timestamp(_get(payload, "UtcTimestamp"))
+    started_at = _event_timestamp(payload, _payload_value(payload, "UtcTimestamp"))
     return StartNotice(
         jellyfin_id=jellyfin_id,
         title=title.strip(),
@@ -266,12 +340,84 @@ class WebhookService:
         )
         if notice is not None:
             async with self._lock:
-                return await self._record_completion(notice)
+                recorded = await self._record_completion(notice)
+            if not recorded:
+                logger.info("Ignored Jellyfin webhook: reason=duplicate_or_conflict")
+            return recorded
         start = parse_start_notice(payload, self.configured_user_id)
         if start is not None:
             async with self._lock:
-                return await self._record_start(start)
+                recorded = await self._record_start(start)
+            if not recorded:
+                logger.info("Ignored Jellyfin webhook: reason=duplicate_or_stale_start")
+            return recorded
+        self._log_ignored(payload)
         return False
+
+    def _log_ignored(self, payload: Any) -> None:
+        if not isinstance(payload, dict):
+            return
+        event_kind = _event_kind(payload)
+        user_value = _payload_value(payload, "UserId")
+        try:
+            user_matches = (
+                str(UUID(user_value.strip()))
+                == _expected_user_id(self.configured_user_id)
+                if isinstance(user_value, str)
+                else False
+            )
+        except (ValueError, AttributeError):
+            user_matches = False
+        item_type = _payload_value(payload, "ItemType")
+        raw_item_kind = (
+            item_type.strip().casefold() if isinstance(item_type, str) else ""
+        )
+        item_kind = (
+            raw_item_kind
+            if raw_item_kind in {"movie", "episode"}
+            else "other"
+            if raw_item_kind
+            else "missing"
+        )
+        if event_kind is None:
+            reason = "unsupported_event"
+        elif not user_matches:
+            reason = "user_mismatch"
+        elif (
+            event_kind == "start"
+            and item_kind != "movie"
+            or event_kind == "stop"
+            and item_kind not in {"movie", "episode"}
+        ):
+            reason = "unsupported_item_type"
+        elif event_kind == "stop":
+            played = _payload_value(payload, "PlayedToCompletion") is True
+            position = _payload_value(payload, "PlaybackPositionTicks")
+            runtime = _payload_value(payload, "RunTimeTicks")
+            reached_threshold = (
+                isinstance(position, int)
+                and not isinstance(position, bool)
+                and isinstance(runtime, int)
+                and not isinstance(runtime, bool)
+                and runtime > 0
+                and position / runtime >= self.completion_threshold
+            )
+            reason = (
+                "incomplete_playback"
+                if not (played or reached_threshold)
+                else "filtered_event"
+            )
+        else:
+            reason = "filtered_event"
+        logger.info(
+            "Ignored Jellyfin webhook: event=%s event_name=%s reason=%s "
+            "item_type=%s user_matches=%s",
+            event_kind or "unsupported",
+            _event_label(payload),
+            reason,
+            item_kind,
+            user_matches,
+        )
 
     async def _record_completion(self, notice: CompletionNotice) -> bool:
         # Resolve idempotency and row existence with a short read before the write
