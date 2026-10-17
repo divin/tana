@@ -10,6 +10,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
+from sqlmodel import select
+
 from tana.database import Database
 from tana.jellyfin import IMDB_ID_PATTERN, JellyfinClient, LibraryItemData
 from tana.models import CompletedPlayback, WatchedItem
@@ -49,6 +52,15 @@ class StartNotice:
     user_id: str
 
 
+@dataclass(frozen=True)
+class ItemStateNotice:
+    jellyfin_id: str
+    kind: str
+    title: str
+    occurred_at: str
+    user_id: str
+
+
 def _get(payload: dict[str, Any], field: str) -> Any:
     field_folded = field.casefold()
     for key, value in payload.items():
@@ -82,6 +94,10 @@ def _event_kind(payload: dict[str, Any]) -> str | None:
             return "stop"
         if normalized == "playbackprogress":
             return "progress"
+        if normalized in {"markplayed", "itemmarkedplayed"}:
+            return "mark_played"
+        if normalized in {"markunplayed", "itemmarkedunplayed"}:
+            return "mark_unplayed"
     return None
 
 
@@ -93,6 +109,26 @@ def _item(payload: dict[str, Any]) -> dict[str, Any]:
 def _nested(payload: dict[str, Any], group: str, field: str) -> Any:
     value = _get(payload, group)
     return _get(value, field) if isinstance(value, dict) else None
+
+
+def _played_signal(payload: dict[str, Any]) -> bool | None:
+    """Resolve Jellyfin's played state, preferring any affirmative signal."""
+    event_kind = _event_kind(payload)
+    if event_kind == "mark_played":
+        return True
+    if event_kind == "mark_unplayed":
+        return False
+    signals = (
+        _get(payload, "PlayedToCompletion"),
+        _nested(_item(payload), "UserData", "Played"),
+    )
+    if any(signal is not None and not isinstance(signal, bool) for signal in signals):
+        raise WebhookPayloadError("Invalid Jellyfin played state")
+    if any(signal is True for signal in signals):
+        return True
+    if any(signal is False for signal in signals):
+        return False
+    return None
 
 
 def _payload_value(payload: dict[str, Any], field: str) -> Any:
@@ -111,6 +147,10 @@ def _payload_value(payload: dict[str, Any], field: str) -> Any:
         return _get(item, "Type")
     if field == "Name":
         return _get(item, "Name")
+    if field == "SeasonNumber":
+        return _get(item, "ParentIndexNumber")
+    if field == "EpisodeNumber":
+        return _get(item, "IndexNumber")
     if field == "UtcTimestamp":
         return _get(payload, "Timestamp") or _get(payload, "Date")
     if field == "PlayedToCompletion":
@@ -188,14 +228,11 @@ def parse_completion_notice(
     if not isinstance(payload, dict):
         raise WebhookPayloadError("Webhook JSON must be an object")
 
-    if _event_kind(payload) != "stop":
+    event_kind = _event_kind(payload)
+    if event_kind not in {"stop", "mark_played"}:
         return None
 
-    played_to_completion = _payload_value(payload, "PlayedToCompletion")
-    if played_to_completion is None:
-        played_to_completion = False
-    if not isinstance(played_to_completion, bool):
-        raise WebhookPayloadError("Invalid PlayedToCompletion")
+    played_to_completion = _played_signal(payload) is True
 
     user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
     if user_id != _expected_user_id(configured_user_id):
@@ -213,8 +250,10 @@ def parse_completion_notice(
     if not isinstance(title, str) or not title.strip():
         raise WebhookPayloadError("Missing or invalid Name")
     timestamp_value = _payload_value(payload, "UtcTimestamp")
-    if not timestamp_value and _event_kind(payload) == "stop":
+    if not timestamp_value and event_kind in {"stop", "mark_played"}:
         timestamp_value = _nested(_item(payload), "UserData", "LastPlayedDate")
+    if not timestamp_value and event_kind == "mark_played":
+        timestamp_value = format_utc(datetime.now(UTC))
     completed_at = _event_timestamp(payload, timestamp_value)
 
     session_id_value = _payload_value(payload, "SessionId")
@@ -272,12 +311,22 @@ def parse_completion_notice(
     )
 
     canonical_fields = (
-        user_id,
-        jellyfin_id,
-        completed_at if timestamp_value or not session_id else "",
-        session_id or "",
-        str(position) if position is not None else "",
-        item_type,
+        (
+            user_id,
+            jellyfin_id,
+            "mark_played",
+            item_type,
+            completed_at if timestamp_value else "",
+        )
+        if event_kind == "mark_played"
+        else (
+            user_id,
+            jellyfin_id,
+            completed_at if timestamp_value or not session_id else "",
+            session_id or "",
+            str(position) if position is not None else "",
+            item_type,
+        )
     )
     event_key = hashlib.sha256("\0".join(canonical_fields).encode()).hexdigest()
     return CompletionNotice(
@@ -308,7 +357,8 @@ def parse_completion_notice(
 def parse_start_notice(payload: Any, configured_user_id: str) -> StartNotice | None:
     if not isinstance(payload, dict):
         raise WebhookPayloadError("Webhook JSON must be an object")
-    if _event_kind(payload) != "start":
+    event_kind = _event_kind(payload)
+    if event_kind not in {"start", "stop"}:
         return None
 
     user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
@@ -334,6 +384,47 @@ def parse_start_notice(payload: Any, configured_user_id: str) -> StartNotice | N
     )
 
 
+def parse_item_state_notice(
+    payload: Any, configured_user_id: str
+) -> ItemStateNotice | None:
+    if not isinstance(payload, dict):
+        raise WebhookPayloadError("Webhook JSON must be an object")
+    event_kind = _event_kind(payload)
+    if event_kind not in {"mark_played", "mark_unplayed"}:
+        return None
+
+    user_id = _canonical_uuid(_payload_value(payload, "UserId"), "UserId")
+    if user_id != _expected_user_id(configured_user_id):
+        return None
+    item_type = _payload_value(payload, "ItemType")
+    if not isinstance(item_type, str) or not item_type:
+        raise WebhookPayloadError("Missing or invalid ItemType")
+    kind = SUPPORTED_TYPES.get(item_type.strip().title())
+    if kind is None:
+        return None
+    jellyfin_id = _canonical_uuid(_payload_value(payload, "ItemId"), "ItemId")
+    title = _payload_value(payload, "Name")
+    if event_kind == "mark_played" and (
+        not isinstance(title, str) or not title.strip()
+    ):
+        raise WebhookPayloadError("Missing or invalid Name")
+    marked_at = (
+        _event_timestamp(
+            payload,
+            _payload_value(payload, "UtcTimestamp") or format_utc(datetime.now(UTC)),
+        )
+        if event_kind == "mark_played"
+        else format_utc(datetime.now(UTC))
+    )
+    return ItemStateNotice(
+        jellyfin_id=jellyfin_id,
+        kind=kind,
+        title=title.strip() if isinstance(title, str) else "",
+        occurred_at=marked_at,
+        user_id=user_id,
+    )
+
+
 class WebhookService:
     def __init__(
         self,
@@ -354,12 +445,32 @@ class WebhookService:
             payload = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise WebhookPayloadError("Malformed webhook JSON") from None
-        if isinstance(payload, dict) and _event_kind(payload) == "progress":
+        event_kind = _event_kind(payload) if isinstance(payload, dict) else None
+        if event_kind == "progress":
             async with self._lock:
                 self._remember_progress(payload)
             return False
+        if event_kind in {"mark_played", "mark_unplayed"}:
+            state_notice = parse_item_state_notice(payload, self.configured_user_id)
+            if state_notice is None:
+                self._log_ignored(payload)
+                return False
+            if event_kind == "mark_unplayed":
+                async with self._lock:
+                    return await self._record_unplayed(state_notice)
+            if state_notice.kind == "movie":
+                async with self._lock:
+                    return await self._record_manual_watched(state_notice)
+            completion = parse_completion_notice(
+                payload, self.configured_user_id, self.completion_threshold
+            )
+            if completion is not None:
+                async with self._lock:
+                    return await self._record_completion(completion)
+            return False
+
         prior_progress = None
-        if isinstance(payload, dict) and _event_kind(payload) == "stop":
+        if event_kind == "stop":
             async with self._lock:
                 prior_progress = self._take_progress(payload)
         notice = parse_completion_notice(
@@ -376,10 +487,23 @@ class WebhookService:
             return recorded
         start = parse_start_notice(payload, self.configured_user_id)
         if start is not None:
-            async with self._lock:
-                recorded = await self._record_start(start)
+            if event_kind == "start" and _played_signal(payload) is True:
+                state_notice = ItemStateNotice(
+                    jellyfin_id=start.jellyfin_id,
+                    kind="movie",
+                    title=start.title,
+                    occurred_at=start.started_at,
+                    user_id=start.user_id,
+                )
+                async with self._lock:
+                    recorded = await self._record_manual_watched(state_notice)
+            else:
+                async with self._lock:
+                    recorded = await self._record_start(
+                        start, only_if_new=event_kind == "stop"
+                    )
             if not recorded:
-                logger.info("Ignored Jellyfin webhook: reason=duplicate_or_stale_start")
+                logger.info("Ignored Jellyfin webhook: reason=duplicate_or_stale_state")
             return recorded
         self._log_ignored(payload, prior_progress)
         return False
@@ -406,20 +530,40 @@ class WebhookService:
         return (user_id, jellyfin_id, session_id.strip())
 
     def _remember_progress(self, payload: dict[str, Any]) -> None:
-        key = self._progress_key(payload)
-        if key is None:
-            return
+        session_id = _payload_value(payload, "SessionId")
+        item_id = _payload_value(payload, "ItemId")
+        user_value = _payload_value(payload, "UserId")
         try:
-            position = _optional_int(
-                _payload_value(payload, "PlaybackPositionTicks"),
-                "PlaybackPositionTicks",
-            )
-            runtime = _optional_int(
-                _payload_value(payload, "RunTimeTicks"), "RunTimeTicks"
+            user_matches = _canonical_uuid(user_value, "UserId") == _expected_user_id(
+                self.configured_user_id
             )
         except WebhookPayloadError:
+            user_matches = False
+        position_value = _payload_value(payload, "PlaybackPositionTicks")
+        runtime_value = _payload_value(payload, "RunTimeTicks")
+        key = self._progress_key(payload)
+        if key is None:
+            logger.debug(
+                "Jellyfin progress not cached: user_matches=%s item_id_present=%s "
+                "session_id_present=%s",
+                user_matches,
+                isinstance(item_id, str) and bool(item_id.strip()),
+                isinstance(session_id, str) and bool(session_id.strip()),
+            )
+            return
+        try:
+            position = _optional_int(position_value, "PlaybackPositionTicks")
+            runtime = _optional_int(runtime_value, "RunTimeTicks")
+        except WebhookPayloadError:
+            logger.debug("Jellyfin progress not cached: reason=invalid_progress_fields")
             return
         if position is None or runtime is None or runtime == 0:
+            logger.debug(
+                "Jellyfin progress not cached: reason=missing_progress_fields "
+                "position_present=%s runtime_present=%s",
+                position is not None,
+                runtime is not None and runtime > 0,
+            )
             return
 
         now = time.monotonic()
@@ -437,17 +581,40 @@ class WebhookService:
         elif len(self._session_progress) >= 1024:
             self._session_progress.pop(next(iter(self._session_progress)))
         self._session_progress[key] = (position, runtime, now)
+        logger.debug(
+            "Cached Jellyfin session progress: ratio=%.3f",
+            position / runtime,
+        )
 
     def _take_progress(self, payload: dict[str, Any]) -> tuple[int, int] | None:
         key = self._progress_key(payload)
         if key is None:
+            session_id = _payload_value(payload, "SessionId")
+            logger.debug(
+                "Jellyfin stop progress lookup unavailable: item_id_present=%s "
+                "session_id_present=%s",
+                isinstance(_payload_value(payload, "ItemId"), str),
+                isinstance(session_id, str) and bool(session_id.strip()),
+            )
             return None
         snapshot = self._session_progress.pop(key, None)
         if snapshot is None:
+            same_item_sessions = sum(
+                cached_key[:2] == key[:2] for cached_key in self._session_progress
+            )
+            logger.debug(
+                "Jellyfin stop progress lookup missed: same_item_sessions=%s",
+                same_item_sessions,
+            )
             return None
         position, runtime, updated_at = snapshot
         if time.monotonic() - updated_at > 6 * 60 * 60:
+            logger.debug("Jellyfin stop progress lookup expired")
             return None
+        logger.debug(
+            "Matched Jellyfin session progress: ratio=%.3f",
+            position / runtime,
+        )
         return position, runtime
 
     def _log_ignored(
@@ -553,6 +720,93 @@ class WebhookService:
             else "unavailable",
             self.completion_threshold,
         )
+
+    async def _record_manual_watched(self, notice: ItemStateNotice) -> bool:
+        async with self.database.session() as session:
+            existing_item = await session.get(WatchedItem, notice.jellyfin_id)
+        if existing_item is not None and (
+            existing_item.kind != "movie" or existing_item.watch_status == "watched"
+        ):
+            return False
+
+        enrichment = None
+        if existing_item is None and self.jellyfin is not None:
+            enrichment = await self._best_effort_enrich(notice.jellyfin_id)
+
+        async with self.database.session() as session, session.begin():
+            item = await session.get(WatchedItem, notice.jellyfin_id)
+            if item is not None and (
+                item.kind != "movie" or item.watch_status == "watched"
+            ):
+                return False
+            now = format_utc(datetime.now(UTC))
+            if item is None:
+                item = WatchedItem(
+                    jellyfin_id=notice.jellyfin_id,
+                    kind="movie",
+                    title=notice.title,
+                    watch_status="watched",
+                    started_at=None,
+                    watched_at=None,
+                    manually_watched_at=notice.occurred_at,
+                    play_count=0,
+                    is_favorite=False,
+                    poster_tag=(
+                        enrichment.poster_tag if enrichment is not None else None
+                    ),
+                    imdb_id=(enrichment.imdb_id if enrichment is not None else None),
+                    updated_at=now,
+                )
+                session.add(item)
+            else:
+                item.title = notice.title
+                item.watch_status = "watched"
+                item.started_at = None
+                item.manually_watched_at = notice.occurred_at
+                item.updated_at = now
+            await session.flush()
+        logger.info("Recorded a Jellyfin Movie watched-state correction")
+        return True
+
+    async def _record_unplayed(self, notice: ItemStateNotice) -> bool:
+        async with self.database.session() as session, session.begin():
+            item = await session.get(WatchedItem, notice.jellyfin_id)
+            if item is None or item.kind != notice.kind:
+                return False
+            events = (
+                await session.exec(
+                    select(CompletedPlayback)
+                    .where(CompletedPlayback.jellyfin_id == notice.jellyfin_id)
+                    .order_by(
+                        text("completed_at DESC"),
+                        text("event_key DESC"),
+                    )
+                )
+            ).all()
+            if notice.kind == "movie":
+                for event in events:
+                    await session.delete(event)
+                await session.flush()
+                await session.delete(item)
+            elif events:
+                await session.delete(events[0])
+                remaining = events[1:]
+                await session.flush()
+                if remaining:
+                    item.play_count = len(remaining)
+                    item.watched_at = max(event.completed_at for event in remaining)
+                    item.updated_at = format_utc(datetime.now(UTC))
+                else:
+                    await session.delete(item)
+            else:
+                await session.delete(item)
+            await session.flush()
+
+        for key in tuple(self._session_progress):
+            if key[:2] == (notice.user_id, notice.jellyfin_id):
+                del self._session_progress[key]
+        logger.info("Applied a Jellyfin MarkUnplayed event")
+        return True
 
     async def _record_completion(self, notice: CompletionNotice) -> bool:
         # Resolve idempotency and row existence with a short read before the write
@@ -679,11 +933,14 @@ class WebhookService:
             )
         )
 
-    async def _record_start(self, notice: StartNotice) -> bool:
+    async def _record_start(
+        self, notice: StartNotice, *, only_if_new: bool = False
+    ) -> bool:
         async with self.database.session() as session:
             existing_item = await session.get(WatchedItem, notice.jellyfin_id)
         if existing_item is not None and (
-            existing_item.kind != "movie"
+            only_if_new
+            or existing_item.kind != "movie"
             or not self._start_accepted(existing_item, notice.started_at)
         ):
             return False
@@ -695,7 +952,8 @@ class WebhookService:
         async with self.database.session() as session, session.begin():
             item = await session.get(WatchedItem, notice.jellyfin_id)
             if item is not None and (
-                item.kind != "movie"
+                only_if_new
+                or item.kind != "movie"
                 or not self._start_accepted(item, notice.started_at)
             ):
                 return False

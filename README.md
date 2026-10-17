@@ -8,9 +8,9 @@
 
 AI tools were used during development.
 
-## Why Tana?
+## 🙋 Why Tana?
 
-There are other great self-hosted tracking projects, such as [Yamtrack](https://github.com/FuzzyGrim/Yamtrack). I created Tana because I wanted a simpler, more focused solution for my own use case.
+There are other great self-hosted tracking projects, such as [Yamtrack](https://github.com/FuzzyGrim/Yamtrack). I created Tana for two reasons: first, I wanted a simpler way to track my watch history; second, I wanted to see how far I could get with agentic coding, as I’m open to new technologies and approaches to software development.
 
 ## 🧭 How it works
 

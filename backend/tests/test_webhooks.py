@@ -20,6 +20,7 @@ OTHER_USER_ID = "00000000000000000000000000000112"
 MOVIE_ID = "6f9619ff8b86d011b42d00cf4fc964ff"
 CANONICAL_MOVIE_ID = "6f9619ff-8b86-d011-b42d-00cf4fc964ff"
 EPISODE_ID = "6f9619ff8b86d011b42d00cf4fc96400"
+CANONICAL_EPISODE_ID = "6f9619ff-8b86-d011-b42d-00cf4fc96400"
 LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
@@ -139,7 +140,7 @@ async def test_yamtrack_style_jellyfin_play_and_stop_payloads_are_tracked(
         "Type": "Movie",
         "Name": "Nested movie",
         "RunTimeTicks": 10_000_000_000,
-        "UserData": {"Played": True, "LastPlayedDate": previous_play},
+        "UserData": {"Played": False, "LastPlayedDate": previous_play},
     }
     start_payload = {
         "Event": "Play",
@@ -178,6 +179,36 @@ async def test_yamtrack_style_jellyfin_play_and_stop_payloads_are_tracked(
     row = media.json()["items"][0]
     assert row["id"] == CANONICAL_MOVIE_ID
     assert row["title"] == "Nested movie"
+    assert row["watch_status"] == "watched"
+    assert row["play_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_nested_played_true_overrides_flat_completion_false(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    payload = {
+        "Event": "Stop",
+        "PlayedToCompletion": False,
+        "User": {"Id": USER_ID},
+        "Item": {
+            "Id": MOVIE_ID,
+            "Type": "Movie",
+            "Name": "Nested completion",
+            "UserData": {"Played": True},
+        },
+        "Timestamp": completion_time(),
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.post("/api/webhooks/jellyfin", json=payload)
+        media = await client.get("/api/media")
+
+    assert response.status_code == 204
+    row = media.json()["items"][0]
     assert row["watch_status"] == "watched"
     assert row["play_count"] == 1
 
@@ -255,14 +286,17 @@ async def test_progress_only_counts_when_stop_confirms_the_session_threshold(
         == stopped.status_code
         == 204
     )
-    assert before_stop.json()["total"] == after_other_session.json()["total"] == 0
+    assert before_stop.json()["total"] == 0
+    partial_row = after_other_session.json()["items"][0]
+    assert partial_row["watch_status"] == "started"
+    assert partial_row["play_count"] == 0
     row = after_stop.json()["items"][0]
     assert row["watch_status"] == "watched"
     assert row["play_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_incomplete_wrong_user_and_other_notification_events_are_ignored(
+async def test_incomplete_stop_starts_untracked_movie_but_ignores_other_events(
     tmp_path: Path,
 ) -> None:
     app = await create_test_app(tmp_path)
@@ -292,9 +326,121 @@ async def test_incomplete_wrong_user_and_other_notification_events_are_ignored(
     assert (
         partial.status_code == other_user.status_code == other_event.status_code == 204
     )
-    assert media.json()["total"] == 0
+    assert media.json()["total"] == 1
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "started"
+    assert row["play_count"] == 0
+    assert len(items) == 1
     assert events == []
-    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_jellyfin_mark_played_and_mark_unplayed_update_movie_state(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    marked_played = {
+        "Event": "MarkPlayed",
+        "User": {"Id": USER_ID},
+        "Item": {
+            "Id": MOVIE_ID,
+            "Type": "Movie",
+            "Name": "Manually watched movie",
+            "UserData": {"Played": True},
+        },
+    }
+    marked_unplayed = {
+        "Event": "MarkUnplayed",
+        "User": {"Id": USER_ID},
+        "Item": {"Id": MOVIE_ID, "Type": "Movie", "Name": "Manually watched movie"},
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        played = await client.post("/api/webhooks/jellyfin", json=marked_played)
+        watched_media = await client.get("/api/media")
+        unplayed = await client.post("/api/webhooks/jellyfin", json=marked_unplayed)
+        unwatched_media = await client.get("/api/media")
+        async with app.state.database.session() as session:
+            events = (await session.exec(select(CompletedPlayback))).all()
+
+    assert played.status_code == unplayed.status_code == 204
+    watched = watched_media.json()["items"][0]
+    assert watched["watch_status"] == "watched"
+    assert watched["manually_watched"] is True
+    assert watched["play_count"] == 0
+    assert unwatched_media.json()["total"] == 0
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_yamtrack_style_episode_mark_played_records_completion(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    payload = {
+        "Event": "MarkPlayed",
+        "User": {"Id": USER_ID},
+        "Item": {
+            "Id": EPISODE_ID,
+            "Type": "Episode",
+            "Name": "Pilot",
+            "SeriesName": "Example series",
+            "ParentIndexNumber": 2,
+            "IndexNumber": 4,
+            "UserData": {"Played": True, "LastPlayedDate": completion_time()},
+        },
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.post("/api/webhooks/jellyfin", json=payload)
+        duplicate = await client.post("/api/webhooks/jellyfin", json=payload)
+        media = await client.get("/api/media", params={"kind": "tv"})
+        async with app.state.database.session() as session:
+            item = await session.get(WatchedItem, CANONICAL_EPISODE_ID)
+
+    assert response.status_code == duplicate.status_code == 204
+    assert item is not None
+    assert item.kind == "tv"
+    assert item.series_title == "Example series"
+    assert item.season_number == 2
+    assert item.episode_number == 4
+    assert item.play_count == 1
+    assert media.json()["items"][0]["watch_status"] == "watched"
+
+
+@pytest.mark.asyncio
+async def test_incomplete_stop_does_not_replace_existing_movie_state(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        completed = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T1"], session_id="complete"),
+        )
+        incomplete = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(
+                completed_at=stamps["T2"],
+                complete=False,
+                position_ticks=0,
+                session_id="incomplete",
+            ),
+        )
+        media = await client.get("/api/media")
+
+    assert completed.status_code == incomplete.status_code == 204
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "watched"
+    assert row["play_count"] == 1
 
 
 @pytest.mark.asyncio
