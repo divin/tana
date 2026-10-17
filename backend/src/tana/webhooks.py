@@ -379,6 +379,8 @@ class WebhookService:
             if raw_item_kind
             else "missing"
         )
+        played_status = "n/a"
+        progress_ratio = None
         if event_kind is None:
             reason = "unsupported_event"
         elif not user_matches:
@@ -391,16 +393,29 @@ class WebhookService:
         ):
             reason = "unsupported_item_type"
         elif event_kind == "stop":
-            played = _payload_value(payload, "PlayedToCompletion") is True
+            played_value = _payload_value(payload, "PlayedToCompletion")
+            played = played_value is True
             position = _payload_value(payload, "PlaybackPositionTicks")
             runtime = _payload_value(payload, "RunTimeTicks")
-            reached_threshold = (
-                isinstance(position, int)
+            progress_ratio = (
+                position / runtime
+                if isinstance(position, int)
                 and not isinstance(position, bool)
                 and isinstance(runtime, int)
                 and not isinstance(runtime, bool)
                 and runtime > 0
-                and position / runtime >= self.completion_threshold
+                else None
+            )
+            reached_threshold = (
+                progress_ratio is not None
+                and progress_ratio >= self.completion_threshold
+            )
+            played_status = (
+                "true"
+                if played_value is True
+                else "false"
+                if played_value is False
+                else "missing"
             )
             reason = (
                 "incomplete_playback"
@@ -411,12 +426,16 @@ class WebhookService:
             reason = "filtered_event"
         logger.info(
             "Ignored Jellyfin webhook: event=%s event_name=%s reason=%s "
-            "item_type=%s user_matches=%s",
+            "item_type=%s user_matches=%s played_to_completion=%s "
+            "playback_ratio=%s completion_threshold=%.2f",
             event_kind or "unsupported",
             _event_label(payload),
             reason,
             item_kind,
             user_matches,
+            played_status,
+            f"{progress_ratio:.3f}" if progress_ratio is not None else "unavailable",
+            self.completion_threshold,
         )
 
     async def _record_completion(self, notice: CompletionNotice) -> bool:
