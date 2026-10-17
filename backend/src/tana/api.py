@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func
+from pydantic import BaseModel, ConfigDict, StrictBool, model_validator
+from sqlalchemy import case, func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -16,6 +17,25 @@ from tana.posters import PosterError
 from tana.time_utils import format_utc, resolve_local_time
 
 router = APIRouter()
+
+MOVIE_NOT_FOUND = "Media item not found"
+MANUAL_CONFLICT = "Manual watched action conflicts with current state"
+
+
+def _state_timestamp() -> Any:
+    """The row's current-state timestamp: started_at for started rows, otherwise
+    the later non-null value of watched_at and manually_watched_at. An ordered
+    CASE is used because SQLite's scalar max() returns NULL if any argument is."""
+    return case(
+        (WatchedItem.watch_status == "started", WatchedItem.started_at),
+        (WatchedItem.watched_at.is_(None), WatchedItem.manually_watched_at),
+        (WatchedItem.manually_watched_at.is_(None), WatchedItem.watched_at),
+        (
+            WatchedItem.watched_at >= WatchedItem.manually_watched_at,
+            WatchedItem.watched_at,
+        ),
+        else_=WatchedItem.manually_watched_at,
+    )
 
 
 class MediaItemResponse(BaseModel):
@@ -28,7 +48,12 @@ class MediaItemResponse(BaseModel):
     series_id: str | None
     season_number: int | None
     episode_number: int | None
-    watched_at: str
+    watch_status: str
+    started_at: str | None
+    watched_at: str | None
+    manually_watched_at: str | None
+    manually_watched: bool
+    is_favorite: bool
     play_count: int
     rewatch_count: int
     poster_url: str | None
@@ -44,6 +69,7 @@ class MediaListResponse(BaseModel):
 
 class StatsCounts(BaseModel):
     movies: int
+    started_movies: int
     tv_episodes: int
     tv_series: int
     total_items: int
@@ -79,6 +105,23 @@ class ConfigResponse(BaseModel):
     timezone: str
 
 
+class MediaMutation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_favorite: StrictBool | None = None
+    manually_watched: StrictBool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        for key in ("is_favorite", "manually_watched"):
+            if key in data and data[key] is None:
+                raise ValueError(f"{key} must be a boolean")
+        return data
+
+
 def _date_boundary(value: date, timezone: ZoneInfo) -> str:
     try:
         local = resolve_local_time(datetime.combine(value, time.min), timezone)
@@ -94,6 +137,7 @@ def _date_filters(
     start_date: date | None,
     end_date: date | None,
     timezone: ZoneInfo,
+    timestamp_column: Any,
 ) -> list[Any]:
     if start_date is not None and end_date is not None and start_date > end_date:
         raise HTTPException(
@@ -101,9 +145,7 @@ def _date_filters(
         )
     conditions: list[Any] = []
     if start_date is not None:
-        conditions.append(
-            WatchedItem.watched_at >= _date_boundary(start_date, timezone)
-        )
+        conditions.append(timestamp_column >= _date_boundary(start_date, timezone))
     if end_date is not None:
         try:
             day_after = end_date + timedelta(days=1)
@@ -111,7 +153,7 @@ def _date_filters(
             raise HTTPException(
                 status_code=422, detail="end_date is out of range"
             ) from None
-        conditions.append(WatchedItem.watched_at < _date_boundary(day_after, timezone))
+        conditions.append(timestamp_column < _date_boundary(day_after, timezone))
     return conditions
 
 
@@ -124,7 +166,12 @@ def _media_item(item: WatchedItem) -> MediaItemResponse:
         series_id=item.series_id,
         season_number=item.season_number,
         episode_number=item.episode_number,
+        watch_status=item.watch_status,
+        started_at=item.started_at,
         watched_at=item.watched_at,
+        manually_watched_at=item.manually_watched_at,
+        manually_watched=item.manually_watched_at is not None,
+        is_favorite=item.is_favorite,
         play_count=item.play_count,
         rewatch_count=max(item.play_count - 1, 0),
         poster_url=(
@@ -147,15 +194,22 @@ async def get_media(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     kind: Annotated[str, Query(pattern="^(movie|tv|all)$")] = "all",
+    status: Annotated[str, Query(pattern="^(all|watched|started)$")] = "all",
+    favorite: bool | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> MediaListResponse:
     timezone = ZoneInfo(request.app.state.settings.TZ)
-    conditions = _date_filters(start_date, end_date, timezone)
+    state_timestamp = _state_timestamp()
+    conditions = _date_filters(start_date, end_date, timezone, state_timestamp)
     if kind != "all":
         conditions.append(WatchedItem.kind == kind)
+    if status in {"watched", "started"}:
+        conditions.append(WatchedItem.watch_status == status)
+    if favorite is not None:
+        conditions.append(WatchedItem.is_favorite == favorite)
 
     count_query = select(func.count()).select_from(WatchedItem).where(*conditions)
     total = (await session.exec(count_query)).one()
@@ -163,7 +217,7 @@ async def get_media(
         select(WatchedItem)
         .where(*conditions)
         .order_by(
-            WatchedItem.watched_at.desc(),
+            state_timestamp.desc(),
             WatchedItem.title.collate("NOCASE").asc(),
             WatchedItem.jellyfin_id.asc(),
         )
@@ -185,25 +239,48 @@ async def _stats_for_period(
     end_date: date | None,
     timezone: ZoneInfo,
 ) -> StatsCounts:
-    conditions = _date_filters(start_date, end_date, timezone)
+    state_timestamp = _state_timestamp()
+    watched_conditions = _date_filters(start_date, end_date, timezone, state_timestamp)
+    started_conditions = _date_filters(
+        start_date, end_date, timezone, WatchedItem.started_at
+    )
+    tv_conditions = _date_filters(
+        start_date, end_date, timezone, WatchedItem.watched_at
+    )
+
     movies = (
         await session.exec(
             select(func.count())
             .select_from(WatchedItem)
-            .where(WatchedItem.kind == "movie", *conditions)
+            .where(
+                WatchedItem.kind == "movie",
+                WatchedItem.watch_status == "watched",
+                *watched_conditions,
+            )
+        )
+    ).one()
+    started_movies = (
+        await session.exec(
+            select(func.count())
+            .select_from(WatchedItem)
+            .where(
+                WatchedItem.kind == "movie",
+                WatchedItem.watch_status == "started",
+                *started_conditions,
+            )
         )
     ).one()
     tv_episodes = (
         await session.exec(
             select(func.count())
             .select_from(WatchedItem)
-            .where(WatchedItem.kind == "tv", *conditions)
+            .where(WatchedItem.kind == "tv", *tv_conditions)
         )
     ).one()
     series_rows = (
         await session.exec(
             select(WatchedItem.series_id, WatchedItem.series_title).where(
-                WatchedItem.kind == "tv", *conditions
+                WatchedItem.kind == "tv", *tv_conditions
             )
         )
     ).all()
@@ -213,9 +290,10 @@ async def _stats_for_period(
     }
     return StatsCounts(
         movies=movies,
+        started_movies=started_movies,
         tv_episodes=tv_episodes,
         tv_series=len(series_keys),
-        total_items=movies + tv_episodes,
+        total_items=movies + started_movies + tv_episodes,
     )
 
 
@@ -348,3 +426,57 @@ async def get_poster(
     ):
         return Response(status_code=304, headers=headers)
     return Response(content=content, media_type="image/jpeg", headers=headers)
+
+
+@router.patch("/api/media/{item_id}", response_model=MediaItemResponse)
+async def patch_media(
+    item_id: str,
+    body: MediaMutation,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> MediaItemResponse:
+    if body.is_favorite is None and body.manually_watched is None:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one of is_favorite or manually_watched is required",
+        )
+    try:
+        canonical_id = str(UUID(item_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail=MOVIE_NOT_FOUND) from None
+
+    async with session.begin():
+        item = await session.get(WatchedItem, canonical_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail=MOVIE_NOT_FOUND)
+
+        if body.manually_watched is not None:
+            if item.kind != "movie":
+                raise HTTPException(
+                    status_code=422,
+                    detail="Manual watch actions apply only to movies",
+                )
+            if (
+                body.manually_watched
+                and item.watch_status == "watched"
+                and item.manually_watched_at is None
+            ):
+                raise HTTPException(status_code=409, detail=MANUAL_CONFLICT)
+
+        now = format_utc(datetime.now(UTC))
+        changed = False
+        if body.manually_watched is True and item.manually_watched_at is None:
+            item.manually_watched_at = now
+            item.watch_status = "watched"
+            changed = True
+        elif body.manually_watched is False and item.manually_watched_at is not None:
+            item.manually_watched_at = None
+            item.watch_status = "started" if item.started_at is not None else "watched"
+            changed = True
+        if body.is_favorite is not None and body.is_favorite != item.is_favorite:
+            item.is_favorite = body.is_favorite
+            changed = True
+        if changed:
+            item.updated_at = now
+        await session.flush()
+    return _media_item(item)

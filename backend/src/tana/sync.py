@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -10,6 +11,7 @@ from tana.jellyfin import (
     JellyfinClient,
     JellyfinError,
     JellyfinResponseError,
+    JellyfinTransportError,
     LibraryItemData,
 )
 from tana.models import SyncState, WatchedItem
@@ -121,6 +123,35 @@ class SyncService:
     def _safe_error(error: Exception) -> str:
         if isinstance(error, JellyfinResponseError):
             return "Jellyfin returned an invalid response"
+        if isinstance(error, JellyfinTransportError):
+            message = str(error)
+            status_match = re.fullmatch(
+                r"Jellyfin returned HTTP ([1-5][0-9]{2})(?: after [0-9]+ attempts)?",
+                message,
+            )
+            if status_match:
+                status = int(status_match.group(1))
+                if status == 401:
+                    return (
+                        "Jellyfin returned HTTP 401; check the API key and user access"
+                    )
+                if status == 403:
+                    return "Jellyfin returned HTTP 403; check API key permissions"
+                if status == 404:
+                    return "Jellyfin returned HTTP 404; check the configured server URL"
+                if status == 429:
+                    return "Jellyfin rate limited the sync (HTTP 429)"
+                if status >= 500:
+                    return f"Jellyfin server error (HTTP {status}) after retries"
+                return f"Jellyfin returned HTTP {status}"
+            if re.fullmatch(
+                r"Jellyfin could not be reached after [0-9]+ attempts", message
+            ):
+                return (
+                    "Jellyfin could not be reached after retries; check the server URL "
+                    "and network availability"
+                )
+            return "Jellyfin request failed"
         if isinstance(error, JellyfinError):
             return "Jellyfin request failed"
         return "Jellyfin sync failed"

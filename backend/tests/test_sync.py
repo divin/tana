@@ -12,7 +12,12 @@ from sqlmodel import select
 
 from tana.config import Settings
 from tana.database import Database
-from tana.jellyfin import JellyfinClient, JellyfinError, LibraryItemData
+from tana.jellyfin import (
+    JellyfinClient,
+    JellyfinError,
+    JellyfinTransportError,
+    LibraryItemData,
+)
 from tana.models import SyncState, WatchedItem
 from tana.sync import SyncService
 
@@ -81,8 +86,12 @@ async def seed_watched_item(
                 jellyfin_id=item_id,
                 kind=kind,
                 title=title,
+                watch_status="watched",
+                started_at=None,
                 watched_at=watched_at,
+                manually_watched_at=None,
                 play_count=play_count,
+                is_favorite=False,
                 series_title="Example series" if kind == "tv" else None,
                 series_id="00000000-0000-0000-0000-000000000222"
                 if kind == "tv"
@@ -217,6 +226,40 @@ async def test_failed_fetch_preserves_items_and_records_safe_failure(
 
 
 @pytest.mark.asyncio
+async def test_failed_sync_reports_safe_actionable_jellyfin_error(
+    tmp_path: Path,
+) -> None:
+    database = await make_database(tmp_path)
+    try:
+        service = SyncService(
+            database,
+            FakeJellyfin(error=JellyfinTransportError("Jellyfin returned HTTP 401")),  # type: ignore[arg-type]
+        )
+        assert await service.run() is False
+
+        async with database.session() as session:
+            state = await session.get(SyncState, 1)
+
+        assert state is not None
+        assert state.last_error == (
+            "Jellyfin returned HTTP 401; check the API key and user access"
+        )
+    finally:
+        await database.dispose()
+
+
+def test_sync_reports_sanitized_network_failure_category() -> None:
+    message = SyncService._safe_error(
+        JellyfinTransportError("Jellyfin could not be reached after 3 attempts")
+    )
+
+    assert message == (
+        "Jellyfin could not be reached after retries; check the server URL "
+        "and network availability"
+    )
+
+
+@pytest.mark.asyncio
 async def test_second_jellyfin_query_failure_does_not_commit_metadata(
     tmp_path: Path,
 ) -> None:
@@ -333,5 +376,175 @@ async def test_sync_serializes_concurrent_runs(tmp_path: Path) -> None:
 
         assert results == [True, True]
         assert maximum_active == 1
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_metadata_sync_preserves_started_manual_and_favorite_state(
+    tmp_path: Path,
+) -> None:
+    database = await make_database(tmp_path)
+    try:
+        async with database.session() as session:
+            session.add_all(
+                [
+                    WatchedItem(
+                        jellyfin_id="6f9619ff-8b86-d011-b42d-00cf4fc965ff",
+                        kind="movie",
+                        title="Started film",
+                        watch_status="started",
+                        started_at="2026-10-15T10:00:00.000000Z",
+                        watched_at=OLD_COMPLETED_AT,
+                        play_count=1,
+                        is_favorite=False,
+                        poster_tag="old-ag-tag",
+                        updated_at=OLD_COMPLETED_AT,
+                    ),
+                    WatchedItem(
+                        jellyfin_id="6f9619ff-8b86-d011-b42d-00cf4fc966ff",
+                        kind="movie",
+                        title="Manual film",
+                        watch_status="watched",
+                        started_at="2026-10-15T11:00:00.000000Z",
+                        watched_at=None,
+                        manually_watched_at="2026-10-15T11:30:00.000000Z",
+                        play_count=0,
+                        is_favorite=True,
+                        updated_at="2026-10-15T11:30:00.000000Z",
+                    ),
+                    WatchedItem(
+                        jellyfin_id=EPISODE_ID,
+                        kind="tv",
+                        title="Episode",
+                        watch_status="watched",
+                        watched_at=OLD_COMPLETED_AT,
+                        play_count=2,
+                        is_favorite=True,
+                        series_title="Series",
+                        series_id="00000000-0000-0000-0000-000000000222",
+                        season_number=1,
+                        episode_number=2,
+                        series_poster_tag="old-series-tag",
+                        updated_at=OLD_COMPLETED_AT,
+                    ),
+                ]
+            )
+            await session.commit()
+
+        jellyfin = FakeJellyfin(
+            (
+                [
+                    metadata(
+                        "6f9619ff-8b86-d011-b42d-00cf4fc965ff",
+                        title="Refreshed started",
+                        poster_tag="started-tag",
+                    ),
+                    metadata(
+                        "6f9619ff-8b86-d011-b42d-00cf4fc966ff",
+                        title="Refreshed manual",
+                        poster_tag="manual-tag",
+                        imdb_id="tt9999999",
+                    ),
+                    metadata(
+                        EPISODE_ID,
+                        title="Refreshed episode",
+                        kind="tv",
+                        series_title="Refreshed series",
+                        series_id="00000000-0000-0000-0000-000000000222",
+                        series_poster_tag="new-series-tag",
+                    ),
+                ],
+                3,
+            )
+        )
+        service = SyncService(database, jellyfin)  # type: ignore[arg-type]
+
+        assert await service.run() is True
+
+        async with database.session() as session:
+            started = await session.get(
+                WatchedItem, "6f9619ff-8b86-d011-b42d-00cf4fc965ff"
+            )
+            manual = await session.get(
+                WatchedItem, "6f9619ff-8b86-d011-b42d-00cf4fc966ff"
+            )
+            episode = await session.get(WatchedItem, EPISODE_ID)
+
+        assert started is not None
+        assert started.title == "Refreshed started"
+        assert started.poster_tag == "started-tag"
+        assert started.watch_status == "started"
+        assert started.started_at == "2026-10-15T10:00:00.000000Z"
+        assert started.watched_at == OLD_COMPLETED_AT
+        assert started.play_count == 1
+        assert started.manually_watched_at is None
+        assert started.is_favorite is False
+
+        assert manual is not None
+        assert manual.title == "Refreshed manual"
+        assert manual.poster_tag == "manual-tag"
+        assert manual.imdb_id == "tt9999999"
+        assert manual.watch_status == "watched"
+        assert manual.watched_at is None
+        assert manual.manually_watched_at == "2026-10-15T11:30:00.000000Z"
+        assert manual.play_count == 0
+        assert manual.is_favorite is True
+
+        assert episode is not None
+        assert episode.title == "Refreshed episode"
+        assert episode.watch_status == "watched"
+        assert episode.watched_at == OLD_COMPLETED_AT
+        assert episode.play_count == 2
+        assert episode.is_favorite is True
+        assert episode.series_poster_tag == "new-series-tag"
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_failed_sync_preserves_started_and_favorite_state(
+    tmp_path: Path,
+) -> None:
+    database = await make_database(tmp_path)
+    try:
+        async with database.session() as session:
+            session.add(
+                WatchedItem(
+                    jellyfin_id="6f9619ff-8b86-d011-b42d-00cf4fc967ff",
+                    kind="movie",
+                    title="Started film",
+                    watch_status="started",
+                    started_at="2026-10-15T10:00:00.000000Z",
+                    watched_at=None,
+                    play_count=0,
+                    is_favorite=True,
+                    poster_tag="tag",
+                    updated_at="2026-10-15T10:00:00.000000Z",
+                )
+            )
+            await session.commit()
+
+        service = SyncService(
+            database,
+            FakeJellyfin(error=JellyfinTransportError("Jellyfin returned HTTP 503")),  # type: ignore[arg-type]
+        )
+        assert await service.run() is False
+
+        async with database.session() as session:
+            item = await session.get(
+                WatchedItem, "6f9619ff-8b86-d011-b42d-00cf4fc967ff"
+            )
+            state = await session.get(SyncState, 1)
+
+        assert item is not None
+        assert item.watch_status == "started"
+        assert item.started_at == "2026-10-15T10:00:00.000000Z"
+        assert item.watched_at is None
+        assert item.play_count == 0
+        assert item.is_favorite is True
+        assert item.poster_tag == "tag"
+        assert state is not None
+        assert state.last_error == "Jellyfin server error (HTTP 503) after retries"
     finally:
         await database.dispose()

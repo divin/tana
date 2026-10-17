@@ -233,6 +233,32 @@ async def test_client_retries_network_failures_then_stops_after_three_attempts()
 
 
 @pytest.mark.asyncio
+async def test_client_reports_sanitized_status_after_exhausting_server_retries() -> (
+    None
+):
+    calls = 0
+
+    async def no_wait(_seconds: float) -> None:
+        return
+
+    def unavailable(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503, text="private server response")
+
+    client = client_for(unavailable, sleep=no_wait)
+    try:
+        with pytest.raises(JellyfinTransportError) as error:
+            await client._get_json("/Items", params={})
+    finally:
+        await client.close()
+
+    assert str(error.value) == "Jellyfin returned HTTP 503 after 3 attempts"
+    assert "private server response" not in str(error.value)
+    assert calls == 3
+
+
+@pytest.mark.asyncio
 async def test_poster_request_uses_verified_auth_and_image_parameters() -> None:
     requests: list[httpx.Request] = []
 

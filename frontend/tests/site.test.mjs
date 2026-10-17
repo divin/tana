@@ -5,10 +5,11 @@ import { test } from "node:test";
 const publicDir = new URL("../public/", import.meta.url);
 
 test("Zola generates the accessible Tana page, module script, and Sass stylesheet", async () => {
-  const [html, css, script] = await Promise.all([
+  const [html, css, script, headerImage] = await Promise.all([
     readFile(new URL("index.html", publicDir), "utf8"),
     readFile(new URL("main.css", publicDir), "utf8"),
     readFile(new URL("scripts/main.mjs", publicDir), "utf8"),
+    readFile(new URL("images/tana-header.png", publicDir)),
   ]);
 
   assert.match(html, /<html lang="en" data-theme="dark">/);
@@ -17,12 +18,17 @@ test("Zola generates the accessible Tana page, module script, and Sass styleshee
   assert.match(html, /href="\/main\.css"/);
   assert.match(html, /type="module" src="\/scripts\/main\.mjs"/);
   assert.match(html, /id="kind-filter"/);
+  assert.match(html, /id="status-filter"/);
+  assert.match(html, /id="favorites-only"/);
+  assert.match(html, /<option value="started">Started<\/option>/);
   assert.match(html, /id="activity-grid"/);
   assert.match(html, /id="theme-select"/);
   assert.match(html, /<option value="rose">Rose<\/option>/);
   assert.match(html, /aria-live="polite"/);
   assert.match(css, /system-ui/);
   assert.match(css, /media-card-no-poster/);
+  assert.match(css, /favorite-button/);
+  assert.match(css, /media-action-error/);
   assert.match(css, /\.activity-grid\{width:100%;min-width:900px;table-layout:fixed/);
   assert.match(css, /\.filter-field input,.filter-field select\{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%/);
   assert.match(css, /\.filter-field\{display:grid;width:100%;min-width:0/);
@@ -34,4 +40,5 @@ test("Zola generates the accessible Tana page, module script, and Sass styleshee
   assert.match(css, /\.activity-legend \.activity-cell\{display:block\}/);
   assert.doesNotMatch(css, /td\.activity-cell\{[^}]*display:block/);
   assert.match(script, /createTracker/);
+  assert(headerImage.length > 0);
 });

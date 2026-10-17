@@ -33,12 +33,20 @@ function makeDateParameters(filters) {
   };
 }
 
-function watchedLabel(playCount, rewatchCount) {
-  if (playCount <= 1) return "Watched once";
-  const rewatches = Number.isInteger(rewatchCount)
+function rewatchesValue(playCount, rewatchCount) {
+  return Number.isInteger(rewatchCount)
     ? rewatchCount
     : Math.max(playCount - 1, 0);
-  return `Watched ${playCount} times · ${rewatches} rewatches`;
+}
+
+function watchedLabel(playCount, rewatchCount) {
+  if (playCount <= 1) return "Watched once";
+  return `Watched ${playCount} times · ${rewatchesValue(playCount, rewatchCount)} rewatches`;
+}
+
+function priorPlaysLabel(playCount, rewatchCount) {
+  if (playCount <= 1) return "Previously watched once";
+  return `Previously watched ${playCount} times · ${rewatchesValue(playCount, rewatchCount)} rewatches`;
 }
 
 function episodeDescription(item) {
@@ -67,6 +75,8 @@ export function createTracker({
 
   const refs = {
     kind: document.getElementById("kind-filter"),
+    status: document.getElementById("status-filter"),
+    favorites: document.getElementById("favorites-only"),
     start: document.getElementById("start-date"),
     end: document.getElementById("end-date"),
     clear: document.getElementById("clear-filters"),
@@ -101,7 +111,7 @@ export function createTracker({
   }
 
   const state = {
-    filters: { kind: "all", start_date: "", end_date: "" },
+    filters: { kind: "all", status: "all", favorite: "", start_date: "", end_date: "" },
     offset: 0,
     timezone: DEFAULT_TIME_ZONE,
     media: null,
@@ -123,6 +133,26 @@ export function createTracker({
       throw new Error(`Request failed (${status})`);
     }
     return response.json();
+  }
+
+  async function patchMedia(item, body) {
+    const response = await fetchImpl(`/api/media/${item.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response || !response.ok) {
+      const status = response?.status ?? "network";
+      throw new Error(`Request failed (${status})`);
+    }
+    const updated = await response.json();
+    state.failures.delete("media");
+    state.failures.delete("stats");
+    await Promise.all([loadMedia(), loadStats()]);
+    return updated;
   }
 
   function showError() {
@@ -231,12 +261,9 @@ export function createTracker({
       "media-kind",
       item.kind === "movie" ? "Movie" : "TV episode",
     );
-    const title = element(
-      document,
-      "h3",
-      "media-title",
-      item.kind === "tv" ? item.series_title || item.title : item.title,
-    );
+    const displayTitle =
+      item.kind === "tv" ? item.series_title || item.title : item.title;
+    const title = element(document, "h3", "media-title", displayTitle);
     content.append(kind, title);
 
     if (item.kind === "tv") {
@@ -244,19 +271,135 @@ export function createTracker({
       content.append(subtitle);
     }
 
-    const watched = element(
+    if (item.watch_status === "started") {
+      content.append(
+        element(
+          document,
+          "p",
+          "media-watched",
+          `Started ${formatDateTime(item.started_at)}`,
+        ),
+      );
+      if (item.play_count > 0) {
+        content.append(
+          element(
+            document,
+            "p",
+            "media-play-count",
+            priorPlaysLabel(item.play_count, item.rewatch_count),
+          ),
+        );
+      }
+    } else if (item.manually_watched) {
+      const manual = element(
+        document,
+        "p",
+        "media-watched",
+        "Marked watched manually",
+      );
+      const manualDate = element(
+        document,
+        "p",
+        "media-manual-date",
+        formatDateTime(item.manually_watched_at),
+      );
+      content.append(manual, manualDate);
+      if (item.play_count > 0) {
+        content.append(
+          element(
+            document,
+            "p",
+            "media-play-count",
+            watchedLabel(item.play_count, item.rewatch_count),
+          ),
+        );
+      }
+    } else {
+      content.append(
+        element(
+          document,
+          "p",
+          "media-watched",
+          `Watched ${formatDateTime(item.watched_at)}`,
+        ),
+      );
+      if (item.play_count > 0) {
+        content.append(
+          element(
+            document,
+            "p",
+            "media-play-count",
+            watchedLabel(item.play_count, item.rewatch_count),
+          ),
+        );
+      }
+    }
+
+    const actions = element(document, "div", "media-actions");
+    const alert = element(
       document,
       "p",
-      "media-watched",
-      `Watched ${formatDateTime(item.watched_at)}`,
+      "media-action-error",
+      "The change could not be saved.",
     );
-    const plays = element(
+    alert.setAttribute("role", "alert");
+    alert.hidden = true;
+    let retryButton = null;
+
+    const runAction = (body, controls) => {
+      for (const control of controls) control.disabled = true;
+      alert.hidden = true;
+      void patchMedia(item, body).then(
+        () => {
+          for (const control of controls) control.disabled = false;
+        },
+        () => {
+          for (const control of controls) control.disabled = false;
+          alert.hidden = false;
+          if (!retryButton) {
+            retryButton = element(document, "button", "action-retry", "Retry");
+            retryButton.setAttribute("type", "button");
+            retryButton.addEventListener("click", () => runAction(body, controls));
+            alert.append(retryButton);
+          }
+        },
+      );
+    };
+
+    if (item.kind === "movie" && item.watch_status === "started") {
+      const mark = element(document, "button", "action-mark-watched", "Mark watched");
+      mark.setAttribute("type", "button");
+      mark.addEventListener("click", () =>
+        runAction({ manually_watched: true }, [mark]),
+      );
+      actions.append(mark);
+    }
+    if (item.kind === "movie" && item.manually_watched) {
+      const undo = element(document, "button", "action-undo-manual", "Undo manual mark");
+      undo.setAttribute("type", "button");
+      undo.addEventListener("click", () =>
+        runAction({ manually_watched: false }, [undo]),
+      );
+      actions.append(undo);
+    }
+
+    const favorite = element(
       document,
-      "p",
-      "media-play-count",
-      watchedLabel(item.play_count, item.rewatch_count),
+      "button",
+      "favorite-button",
+      item.is_favorite ? "Remove favorite" : "Add favorite",
     );
-    content.append(watched, plays);
+    favorite.setAttribute("type", "button");
+    favorite.setAttribute("aria-pressed", String(item.is_favorite));
+    favorite.setAttribute(
+      "aria-label",
+      `${item.is_favorite ? "Remove" : "Add"} ${displayTitle} ${item.is_favorite ? "from" : "to"} favorites`,
+    );
+    favorite.addEventListener("click", () =>
+      runAction({ is_favorite: !item.is_favorite }, [favorite]),
+    );
+    actions.append(favorite);
+    content.append(actions, alert);
 
     if (item.kind === "movie") {
       const imdbUrl = validImdbUrl(item.imdb_url);
@@ -445,6 +588,8 @@ export function createTracker({
   function mediaUrl() {
     const parameters = {
       kind: state.filters.kind === "all" ? "" : state.filters.kind,
+      status: state.filters.status === "all" ? "" : state.filters.status,
+      favorite: state.filters.favorite === "true" ? "true" : "",
       start_date: state.filters.start_date,
       end_date: state.filters.end_date,
       offset: state.offset > 0 ? state.offset : "",
@@ -562,6 +707,8 @@ export function createTracker({
   function currentFilters() {
     return {
       kind: refs.kind.value || "all",
+      status: refs.status.value || "all",
+      favorite: refs.favorites.checked ? "true" : "",
       start_date: refs.start.value || "",
       end_date: refs.end.value || "",
     };
@@ -584,9 +731,17 @@ export function createTracker({
 
   function clearFilters() {
     refs.kind.value = "all";
+    refs.status.value = "all";
+    refs.favorites.checked = false;
     refs.start.value = "";
     refs.end.value = "";
-    state.filters = { kind: "all", start_date: "", end_date: "" };
+    state.filters = {
+      kind: "all",
+      status: "all",
+      favorite: "",
+      start_date: "",
+      end_date: "",
+    };
     state.offset = 0;
     refs.filterError.textContent = "";
     refs.filterError.hidden = true;
@@ -607,6 +762,8 @@ export function createTracker({
 
   function bindEvents() {
     refs.kind.addEventListener("change", applyFilters);
+    refs.status.addEventListener("change", applyFilters);
+    refs.favorites.addEventListener("change", applyFilters);
     refs.start.addEventListener("change", applyFilters);
     refs.end.addEventListener("change", applyFilters);
     refs.clear.addEventListener("click", clearFilters);
@@ -648,4 +805,4 @@ export function createTracker({
   };
 }
 
-export { episodeDescription, requestUrl, watchedLabel };
+export { episodeDescription, priorPlaysLabel, requestUrl, watchedLabel };

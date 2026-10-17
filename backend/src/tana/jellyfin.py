@@ -262,18 +262,22 @@ class JellyfinClient:
                     )
                 return data
             except _RetryableResponse as error:
+                if attempt + 1 >= MAX_ATTEMPTS:
+                    raise JellyfinTransportError(
+                        f"Jellyfin returned HTTP {error.response.status_code} "
+                        f"after {MAX_ATTEMPTS} attempts"
+                    ) from None
                 retry_after = self._retry_after(error.response)
             except (httpx.TimeoutException, httpx.NetworkError):
-                pass
+                if attempt + 1 >= MAX_ATTEMPTS:
+                    raise JellyfinTransportError(
+                        f"Jellyfin could not be reached after {MAX_ATTEMPTS} attempts"
+                    ) from None
             except httpx.HTTPStatusError as error:
                 raise JellyfinTransportError(
                     f"Jellyfin returned HTTP {error.response.status_code}"
                 ) from None
 
-            if attempt + 1 >= MAX_ATTEMPTS:
-                raise JellyfinTransportError(
-                    "Jellyfin request failed after 3 attempts"
-                ) from None
             await self._sleep(
                 retry_after if retry_after is not None else float(attempt + 1)
             )

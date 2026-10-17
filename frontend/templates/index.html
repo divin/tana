@@ -101,6 +101,18 @@
           </select>
         </div>
         <div class="filter-field">
+          <label for="status-filter">Status</label>
+          <select id="status-filter" name="status">
+            <option value="all">Any status</option>
+            <option value="watched">Watched</option>
+            <option value="started">Started</option>
+          </select>
+        </div>
+        <div class="filter-field filter-field-checkbox">
+          <label for="favorites-only">Favorites</label>
+          <input id="favorites-only" name="favorite" type="checkbox">
+        </div>
+        <div class="filter-field">
           <label for="start-date">From date</label>
           <input id="start-date" name="start_date" type="date" aria-describedby="filter-error">
         </div>

@@ -20,7 +20,7 @@ SUPPORTED_TYPES = {"Movie": "movie", "Episode": "tv"}
 
 
 class WebhookPayloadError(ValueError):
-    """A malformed completion webhook; its payload must not be included in errors."""
+    """A malformed webhook; its payload must not be included in errors."""
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,14 @@ class CompletionNotice:
     season_number: int | None
     episode_number: int | None
     imdb_id: str | None
+
+
+@dataclass(frozen=True)
+class StartNotice:
+    jellyfin_id: str
+    title: str
+    started_at: str
+    user_id: str
 
 
 def _get(payload: dict[str, Any], field: str) -> Any:
@@ -89,6 +97,13 @@ def _optional_int(value: Any, field_name: str) -> int | None:
     return value
 
 
+def _expected_user_id(configured_user_id: str) -> str:
+    try:
+        return str(UUID(configured_user_id))
+    except (ValueError, AttributeError):
+        raise WebhookPayloadError("Configured Jellyfin user ID is invalid") from None
+
+
 def parse_completion_notice(
     payload: Any, configured_user_id: str, completion_threshold: float = 1.0
 ) -> CompletionNotice | None:
@@ -106,11 +121,7 @@ def parse_completion_notice(
         raise WebhookPayloadError("Missing or invalid PlayedToCompletion")
 
     user_id = _canonical_uuid(_get(payload, "UserId"), "UserId")
-    try:
-        expected_user_id = str(UUID(configured_user_id))
-    except (ValueError, AttributeError):
-        raise WebhookPayloadError("Configured Jellyfin user ID is invalid") from None
-    if user_id != expected_user_id:
+    if user_id != _expected_user_id(configured_user_id):
         return None
 
     item_type = _get(payload, "ItemType")
@@ -198,6 +209,39 @@ def parse_completion_notice(
     )
 
 
+def parse_start_notice(payload: Any, configured_user_id: str) -> StartNotice | None:
+    if not isinstance(payload, dict):
+        raise WebhookPayloadError("Webhook JSON must be an object")
+
+    notification_type = _get(payload, "NotificationType")
+    if not isinstance(notification_type, str) or not notification_type:
+        raise WebhookPayloadError("Missing or invalid NotificationType")
+    if notification_type != "PlaybackStart":
+        return None
+
+    user_id = _canonical_uuid(_get(payload, "UserId"), "UserId")
+    if user_id != _expected_user_id(configured_user_id):
+        return None
+
+    item_type = _get(payload, "ItemType")
+    if not isinstance(item_type, str) or not item_type:
+        raise WebhookPayloadError("Missing or invalid ItemType")
+    if item_type != "Movie":
+        return None
+
+    jellyfin_id = _canonical_uuid(_get(payload, "ItemId"), "ItemId")
+    title = _get(payload, "Name")
+    if not isinstance(title, str) or not title.strip():
+        raise WebhookPayloadError("Missing or invalid Name")
+    started_at = _canonical_timestamp(_get(payload, "UtcTimestamp"))
+    return StartNotice(
+        jellyfin_id=jellyfin_id,
+        title=title.strip(),
+        started_at=started_at,
+        user_id=user_id,
+    )
+
+
 class WebhookService:
     def __init__(
         self,
@@ -220,10 +264,14 @@ class WebhookService:
         notice = parse_completion_notice(
             payload, self.configured_user_id, self.completion_threshold
         )
-        if notice is None:
-            return False
-        async with self._lock:
-            return await self._record_completion(notice)
+        if notice is not None:
+            async with self._lock:
+                return await self._record_completion(notice)
+        start = parse_start_notice(payload, self.configured_user_id)
+        if start is not None:
+            async with self._lock:
+                return await self._record_start(start)
+        return False
 
     async def _record_completion(self, notice: CompletionNotice) -> bool:
         # Resolve idempotency and row existence with a short read before the write
@@ -241,7 +289,7 @@ class WebhookService:
 
         enrichment = None
         if existing_item is None and self.jellyfin is not None:
-            enrichment = await self._best_effort_enrich(notice)
+            enrichment = await self._best_effort_enrich(notice.jellyfin_id)
 
         async with self.database.session() as session, session.begin():
             if await session.get(CompletedPlayback, notice.event_key) is not None:
@@ -261,8 +309,12 @@ class WebhookService:
                     series_id=notice.series_id,
                     season_number=notice.season_number,
                     episode_number=notice.episode_number,
+                    watch_status="watched",
+                    started_at=None,
                     watched_at=notice.completed_at,
+                    manually_watched_at=None,
                     play_count=1,
+                    is_favorite=False,
                     poster_tag=(
                         enrichment.poster_tag
                         if enrichment is not None and notice.kind == "movie"
@@ -299,8 +351,27 @@ class WebhookService:
                     )
                 elif notice.imdb_id:
                     item.imdb_id = notice.imdb_id
-                item.watched_at = max(item.watched_at, notice.completed_at)
+                item.watched_at = (
+                    max(item.watched_at, notice.completed_at)
+                    if item.watched_at is not None
+                    else notice.completed_at
+                )
                 item.play_count += 1
+                # A late completion still enters the ledger and count, but cannot
+                # cancel a newer start or manual action.
+                if (
+                    item.started_at is not None
+                    and item.started_at <= notice.completed_at
+                ):
+                    item.started_at = None
+                if (
+                    item.manually_watched_at is not None
+                    and item.manually_watched_at <= notice.completed_at
+                ):
+                    item.manually_watched_at = None
+                item.watch_status = (
+                    "started" if item.started_at is not None else "watched"
+                )
                 item.updated_at = now
 
             session.add(
@@ -315,14 +386,78 @@ class WebhookService:
         logger.info("Recorded a confirmed Jellyfin playback completion")
         return True
 
-    async def _best_effort_enrich(
-        self, notice: CompletionNotice
-    ) -> LibraryItemData | None:
+    @staticmethod
+    def _start_accepted(item: WatchedItem, started_at: str) -> bool:
+        """A start only supersedes strictly older state timestamps."""
+        return not (
+            (item.started_at is not None and started_at <= item.started_at)
+            or (item.watched_at is not None and started_at <= item.watched_at)
+            or (
+                item.manually_watched_at is not None
+                and started_at <= item.manually_watched_at
+            )
+        )
+
+    async def _record_start(self, notice: StartNotice) -> bool:
+        async with self.database.session() as session:
+            existing_item = await session.get(WatchedItem, notice.jellyfin_id)
+        if existing_item is not None and (
+            existing_item.kind != "movie"
+            or not self._start_accepted(existing_item, notice.started_at)
+        ):
+            return False
+
+        enrichment = None
+        if existing_item is None and self.jellyfin is not None:
+            enrichment = await self._best_effort_enrich(notice.jellyfin_id)
+
+        async with self.database.session() as session, session.begin():
+            item = await session.get(WatchedItem, notice.jellyfin_id)
+            if item is not None and (
+                item.kind != "movie"
+                or not self._start_accepted(item, notice.started_at)
+            ):
+                return False
+
+            now = format_utc(datetime.now(UTC))
+            if item is None:
+                item = WatchedItem(
+                    jellyfin_id=notice.jellyfin_id,
+                    kind="movie",
+                    title=notice.title,
+                    watch_status="started",
+                    started_at=notice.started_at,
+                    watched_at=None,
+                    manually_watched_at=None,
+                    play_count=0,
+                    is_favorite=False,
+                    poster_tag=(
+                        enrichment.poster_tag if enrichment is not None else None
+                    ),
+                    imdb_id=(
+                        enrichment.imdb_id
+                        if enrichment is not None and enrichment.imdb_id is not None
+                        else None
+                    ),
+                    updated_at=now,
+                )
+                session.add(item)
+            else:
+                item.title = notice.title
+                item.watch_status = "started"
+                item.started_at = notice.started_at
+                item.manually_watched_at = None
+                item.updated_at = now
+            await session.flush()
+        logger.info("Recorded a Jellyfin Movie playback start")
+        return True
+
+    async def _best_effort_enrich(self, jellyfin_id: str) -> LibraryItemData | None:
         """Best-effort current item metadata; failures never fail the webhook."""
         if self.jellyfin is None:
             return None
         try:
-            return await self.jellyfin.fetch_item_details(notice.jellyfin_id)
+            return await self.jellyfin.fetch_item_details(jellyfin_id)
         except Exception:  # noqa: BLE001 - enrichment must never fail the webhook
             logger.warning(
                 "Webhook metadata enrichment failed; the scheduled sync will repair it"

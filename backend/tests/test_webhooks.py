@@ -499,3 +499,350 @@ async def test_new_tv_row_uses_series_poster_tag_from_enrichment(
         episode["poster_url"] == "/api/posters/00000000-0000-0000-0000-000000000222.jpg"
     )
     assert episode["play_count"] == 1
+
+
+def movie_start_event(
+    *,
+    started_at: str | None = None,
+    user_id: str = USER_ID,
+    item_id: str = MOVIE_ID,
+    title: str = "Started movie",
+    extras: dict[str, object] | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "NotificationType": "PlaybackStart",
+        "UserId": user_id,
+        "ItemId": item_id,
+        "ItemType": "Movie",
+        "Name": title,
+        "UtcTimestamp": started_at or completion_time(),
+    }
+    if extras:
+        payload.update(extras)
+    return payload
+
+
+def fixed_stamps() -> dict[str, str]:
+    base = datetime.now(LOCAL_TIMEZONE).replace(
+        hour=12, minute=30, second=0, microsecond=0
+    )
+    return {
+        name: (base + timedelta(minutes=offset)).isoformat()
+        for name, offset in {
+            "T1": 0,
+            "T2": 1,
+            "T3": 2,
+            "T4": 3,
+            "T5": 4,
+        }.items()
+    }
+
+
+@pytest.mark.asyncio
+async def test_valid_movie_start_creates_started_row_without_counts(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        first = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T1"])
+        )
+        duplicate = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T1"])
+        )
+        media = await client.get("/api/media")
+        stats = await client.get("/api/stats")
+        activity = await client.get("/api/activity")
+
+        async with app.state.database.session() as session:
+            item = await session.get(WatchedItem, CANONICAL_MOVIE_ID)
+            events = (await session.exec(select(CompletedPlayback))).all()
+
+    assert first.status_code == duplicate.status_code == 204
+    assert item is not None
+    assert item.watch_status == "started"
+    assert item.started_at.endswith("Z")
+    assert item.watched_at is None
+    assert item.play_count == 0
+    assert item.is_favorite is False
+    assert events == []
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "started"
+    assert row["play_count"] == 0
+    assert row["manually_watched"] is False
+    assert stats.json()["movies"] == 0
+    assert stats.json()["started_movies"] == 1
+    assert sum(day["count"] for day in activity.json()["days"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_start_validation_filters_users_types_and_fields(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        wrong_user = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_start_event(user_id=OTHER_USER_ID),
+        )
+        episode_start = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_start_event(extras={"ItemType": "Episode"}),
+        )
+        missing_user = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_start_event(extras={"UserId": None}),
+        )
+        malformed_item_id = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_start_event(extras={"ItemId": "not-a-uuid"}),
+        )
+        missing_name = await client.post(
+            "/api/webhooks/jellyfin",
+            json={**movie_start_event(), "Name": ""},
+        )
+        missing_timestamp = await client.post(
+            "/api/webhooks/jellyfin",
+            json={
+                key: value
+                for key, value in movie_start_event().items()
+                if key != "UtcTimestamp"
+            },
+        )
+        valid = await client.post("/api/webhooks/jellyfin", json=movie_start_event())
+
+        async with app.state.database.session() as session:
+            items = (await session.exec(select(WatchedItem))).all()
+
+    assert wrong_user.status_code == episode_start.status_code == 204
+    assert missing_user.status_code == 400
+    assert malformed_item_id.status_code == 400
+    assert missing_name.status_code == 400
+    assert missing_timestamp.status_code == 400
+    assert valid.status_code == 204
+    assert len(items) == 1
+
+
+@pytest.mark.asyncio
+async def test_start_parses_case_insensitive_keys(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    payload = {
+        "notificationtype": "PlaybackStart",
+        "userid": USER_ID,
+        "itemid": MOVIE_ID,
+        "itemtype": "Movie",
+        "name": "Case-insensitive start",
+        "utctimestamp": fixed_stamps()["T1"],
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.post("/api/webhooks/jellyfin", json=payload)
+        media = await client.get("/api/media")
+
+    assert response.status_code == 204
+    row = media.json()["items"][0]
+    assert row["title"] == "Case-insensitive start"
+    assert row["watch_status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_start_after_completion_and_completion_after_start_transitions(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        completed = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T1"], session_id="watch-1"),
+        )
+        started = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T2"])
+        )
+        after_start = await client.get("/api/media")
+        finished = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T3"], session_id="watch-2"),
+        )
+        after_completion = await client.get("/api/media")
+
+    assert completed.status_code == started.status_code == finished.status_code == 204
+    started_row = after_start.json()["items"][0]
+    assert started_row["watch_status"] == "started"
+    assert started_row["watched_at"].endswith("Z")
+    assert started_row["play_count"] == 1
+    watched_row = after_completion.json()["items"][0]
+    assert watched_row["watch_status"] == "watched"
+    assert watched_row["play_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_older_and_equal_starts_are_no_ops(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        newer = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T3"])
+        )
+        equal = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T3"])
+        )
+        older = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T1"])
+        )
+        media = await client.get("/api/media")
+
+    assert newer.status_code == equal.status_code == older.status_code == 204
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "started"
+    assert row["started_at"].endswith("Z")
+    assert row["play_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_old_start_cannot_undo_a_later_completion(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T3"], session_id="watch-1"),
+        )
+        old_start = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T2"])
+        )
+        media = await client.get("/api/media")
+
+    assert old_start.status_code == 204
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "watched"
+    assert row["watched_at"].endswith("Z")
+    assert row["play_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_late_completion_counts_but_cannot_cancel_newer_start(
+    tmp_path: Path,
+) -> None:
+    app = await create_test_app(tmp_path)
+    stamps = fixed_stamps()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T2"])
+        )
+        started = await client.post(
+            "/api/webhooks/jellyfin", json=movie_start_event(started_at=stamps["T4"])
+        )
+        late = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T3"], session_id="watch-1"),
+        )
+        duplicate = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_event(completed_at=stamps["T3"], session_id="watch-1"),
+        )
+        media = await client.get("/api/media")
+        activity = await client.get("/api/activity")
+
+    assert started.status_code == late.status_code == duplicate.status_code == 204
+    row = media.json()["items"][0]
+    assert row["watch_status"] == "started"
+    assert row["started_at"].endswith("Z")
+    assert row["watched_at"].endswith("Z")
+    assert row["play_count"] == 1
+    assert row["rewatch_count"] == 0
+    assert sum(day["count"] for day in activity.json()["days"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_tv_start_is_ignored(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        episode_start = await client.post(
+            "/api/webhooks/jellyfin",
+            json=movie_start_event(item_id=EPISODE_ID, extras={"ItemType": "Episode"}),
+        )
+        media = await client.get("/api/media")
+
+    assert episode_start.status_code == 204
+    assert media.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_new_start_row_is_enriched_with_poster_and_imdb(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    calls = 0
+
+    async def enrich(item_id: str) -> LibraryItemData:
+        nonlocal calls
+        calls += 1
+        return LibraryItemData(
+            jellyfin_id=item_id,
+            kind="movie",
+            title="Prometheus",
+            poster_tag="started-tag",
+            imdb_id="tt1446714",
+        )
+
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        app.state.jellyfin.fetch_item_details = enrich
+        response = await client.post("/api/webhooks/jellyfin", json=movie_start_event())
+        media = await client.get("/api/media")
+
+    assert response.status_code == 204
+    assert calls == 1
+    row = media.json()["items"][0]
+    assert row["poster_url"] == f"/api/posters/{CANONICAL_MOVIE_ID}.jpg"
+    assert row["imdb_url"] == "https://www.imdb.com/title/tt1446714/"
+    assert row["watch_status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_start_enrichment_failure_still_records_row(tmp_path: Path) -> None:
+    app = await create_test_app(tmp_path)
+    calls = 0
+
+    async def fail(_item_id: str) -> LibraryItemData:
+        nonlocal calls
+        calls += 1
+        raise JellyfinError("jellyfin unavailable")
+
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        app.state.jellyfin.fetch_item_details = fail
+        response = await client.post("/api/webhooks/jellyfin", json=movie_start_event())
+        media = await client.get("/api/media")
+
+    assert response.status_code == 204
+    assert calls == 1
+    row = media.json()["items"][0]
+    assert row["poster_url"] is None
+    assert row["watch_status"] == "started"
+    assert row["play_count"] == 0

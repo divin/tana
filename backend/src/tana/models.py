@@ -8,7 +8,38 @@ class WatchedItem(SQLModel, table=True):
     __tablename__ = "watched_items"
     __table_args__ = (
         CheckConstraint("kind IN ('movie', 'tv')", name="ck_watched_items_kind"),
-        CheckConstraint("play_count >= 1", name="ck_watched_items_play_count"),
+        CheckConstraint(
+            "watch_status IN ('started', 'watched')",
+            name="ck_watched_items_watch_status",
+        ),
+        CheckConstraint("is_favorite IN (0, 1)", name="ck_watched_items_is_favorite"),
+        CheckConstraint("play_count >= 0", name="ck_watched_items_play_count"),
+        CheckConstraint(
+            "(play_count = 0 AND watched_at IS NULL) "
+            "OR (play_count > 0 AND watched_at IS NOT NULL)",
+            name="ck_watched_items_count_date_consistency",
+        ),
+        CheckConstraint(
+            "watch_status != 'started' "
+            "OR (started_at IS NOT NULL AND manually_watched_at IS NULL)",
+            name="ck_watched_items_started_state",
+        ),
+        CheckConstraint(
+            "kind = 'tv' OR watch_status = 'started' "
+            "OR watched_at IS NOT NULL OR manually_watched_at IS NOT NULL",
+            name="ck_watched_items_watched_evidence",
+        ),
+        CheckConstraint(
+            "kind != 'tv' OR ("
+            "watch_status = 'watched' AND started_at IS NULL "
+            "AND manually_watched_at IS NULL AND watched_at IS NOT NULL "
+            "AND play_count >= 1)",
+            name="ck_watched_items_tv_always_watched",
+        ),
+        CheckConstraint(
+            "manually_watched_at IS NULL OR kind = 'movie'",
+            name="ck_watched_items_manual_movie_only",
+        ),
         CheckConstraint(
             "(kind = 'movie' AND series_title IS NULL AND series_id IS NULL "
             "AND season_number IS NULL AND episode_number IS NULL "
@@ -18,26 +49,32 @@ class WatchedItem(SQLModel, table=True):
             name="ck_watched_items_kind_fields",
         ),
         Index(
-            "ix_watched_items_watched_title",
-            text("watched_at DESC"),
+            "ix_watched_items_status_started_title",
+            "watch_status",
+            text("started_at DESC"),
             text("title COLLATE NOCASE"),
         ),
         Index(
-            "ix_watched_items_kind_watched",
-            "kind",
+            "ix_watched_items_status_watched_title",
+            "watch_status",
             text("watched_at DESC"),
+            text("title COLLATE NOCASE"),
         ),
     )
 
     jellyfin_id: str = Field(primary_key=True, sa_type=String)
     kind: str = Field(sa_type=String)
     title: str = Field(sa_type=String)
+    watch_status: str = Field(sa_type=String)
+    started_at: str | None = Field(default=None, sa_type=String)
+    watched_at: str | None = Field(default=None, sa_type=String)
+    manually_watched_at: str | None = Field(default=None, sa_type=String)
+    play_count: int = Field(default=0)
+    is_favorite: bool = Field(default=False)
     series_title: str | None = Field(default=None, sa_type=String)
     series_id: str | None = Field(default=None, sa_type=String)
     season_number: int | None = Field(default=None)
     episode_number: int | None = Field(default=None)
-    watched_at: str = Field(sa_type=String)
-    play_count: int = Field(default=1)
     poster_tag: str | None = Field(default=None, sa_type=String)
     series_poster_tag: str | None = Field(default=None, sa_type=String)
     imdb_id: str | None = Field(default=None, sa_type=String)

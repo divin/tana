@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   createTracker,
   episodeDescription,
+  priorPlaysLabel,
   requestUrl,
   watchedLabel,
 } from "../static/scripts/tracker.mjs";
@@ -16,6 +17,7 @@ class FakeElement {
     this.listeners = new Map();
     this.hidden = false;
     this.disabled = false;
+    this.checked = false;
     this.value = "";
     this.textContent = "";
     this.className = "";
@@ -55,6 +57,8 @@ class FakeElement {
 
 const ELEMENT_IDS = [
   "kind-filter",
+  "status-filter",
+  "favorites-only",
   "start-date",
   "end-date",
   "clear-filters",
@@ -135,12 +139,13 @@ function defaultStats() {
   return {
     period: { start_date: null, end_date: null },
     movies: 1,
+    started_movies: 0,
     tv_episodes: 2,
     tv_series: 1,
     total_items: 3,
     recent: {
-      last_7_days: { movies: 1, tv_episodes: 1, tv_series: 1, total_items: 2 },
-      last_30_days: { movies: 4, tv_episodes: 5, tv_series: 2, total_items: 9 },
+      last_7_days: { movies: 1, started_movies: 0, tv_episodes: 1, tv_series: 1, total_items: 2 },
+      last_30_days: { movies: 4, started_movies: 0, tv_episodes: 5, tv_series: 2, total_items: 9 },
     },
   };
 }
@@ -154,7 +159,12 @@ function mediaItem(overrides = {}) {
     series_id: null,
     season_number: null,
     episode_number: null,
+    watch_status: "watched",
+    started_at: null,
     watched_at: "2025-01-02T03:04:05.000000Z",
+    manually_watched_at: null,
+    manually_watched: false,
+    is_favorite: false,
     play_count: 3,
     rewatch_count: 2,
     poster_url: "/api/posters/00000000-0000-0000-0000-000000000001.jpg",
@@ -491,12 +501,12 @@ test("sync status polls every minute and uses the server timezone", async () => 
   assert.equal(harness.intervalDelay, 60_000);
 
   fake.status.status = "failed";
-  fake.status.last_error = "Jellyfin request failed";
+  fake.status.last_error = "Jellyfin returned HTTP 401; check the API key and user access";
   await harness.intervalCallback();
   await flush();
 
   const status = harness.document.getElementById("sync-status").textContent;
-  assert.match(status, /Last sync failed: Jellyfin request failed/);
+  assert.match(status, /Last sync failed: Jellyfin returned HTTP 401/);
   assert.match(status, /last successful sync/);
   assert.doesNotMatch(status, /UTC\)/);
 });
@@ -508,4 +518,260 @@ test("pure rendering helpers handle play counts, episode numbers, and query valu
   assert.equal(episodeDescription({ season_number: null, episode_number: 3, title: "Pilot" }), "Episode 3 — Pilot");
   assert.equal(episodeDescription({ season_number: 1, episode_number: null, title: "Pilot" }), "Season 1 — Pilot");
   assert.equal(requestUrl("/api/media", { kind: "all", start_date: "", offset: 50 }), "/api/media?kind=all&offset=50");
+});
+
+
+function createMediaTrackingFetch(initialItems) {
+  const items = initialItems;
+  const calls = [];
+  let pendingFailure = false;
+  let pendingGate = null;
+  const handler = async (url, options = {}) => {
+    const method = options.method || "GET";
+    calls.push({
+      url,
+      method,
+      body: typeof options.body === "string" ? JSON.parse(options.body) : null,
+    });
+    if (url === "/api/config") return response({ timezone: "UTC" });
+    if (url === "/api/stats") return response(defaultStats());
+    if (url === "/api/activity") return response(defaultActivity());
+    if (url === "/api/sync/status") return response({ status: "never" });
+    if (method === "PATCH") {
+      if (pendingGate) await pendingGate;
+      if (pendingFailure) {
+        pendingFailure = false;
+        return response({}, false, 503);
+      }
+      const body = JSON.parse(options.body);
+      const index = items.findIndex((item) => item.id === url.split("/").at(-1));
+      if (index === -1) return response({ detail: "Media item not found" }, false, 404);
+      items[index] = { ...items[index], ...body };
+      if (body.manually_watched === true) {
+        items[index].manually_watched = true;
+        items[index].manually_watched_at = "2026-10-15T12:00:00.000000Z";
+        items[index].watch_status = "watched";
+      } else if (body.manually_watched === false && items[index].manually_watched) {
+        items[index].manually_watched = false;
+        items[index].manually_watched_at = null;
+        items[index].watch_status = "started";
+      }
+      if (body.is_favorite !== undefined) items[index].is_favorite = body.is_favorite;
+      return response(items[index]);
+    }
+    if (url.startsWith("/api/media")) {
+      return response(mediaResponse(items, items.length));
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+  return {
+    calls,
+    items,
+    handler,
+    set failNextPatch(value) { pendingFailure = value; },
+    set gate(promise) { pendingGate = promise; },
+  };
+}
+
+test("status and favorites filters produce exact query strings", async () => {
+  const fake = createMediaTrackingFetch([]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+  fake.calls.length = 0;
+
+  document.getElementById("status-filter").value = "started";
+  document.getElementById("status-filter").dispatch("change");
+  await flush();
+  assert.deepEqual(new Set(fake.calls.map((call) => call.url)), new Set([
+    "/api/media?status=started",
+    "/api/stats",
+  ]));
+
+  fake.calls.length = 0;
+  document.getElementById("favorites-only").checked = true;
+  document.getElementById("favorites-only").dispatch("change");
+  await flush();
+  assert.deepEqual(new Set(fake.calls.map((call) => call.url)), new Set([
+    "/api/media?status=started&favorite=true",
+    "/api/stats",
+  ]));
+
+  fake.calls.length = 0;
+  document.getElementById("status-filter").value = "watched";
+  document.getElementById("status-filter").dispatch("change");
+  await flush();
+  assert.deepEqual(new Set(fake.calls.map((call) => call.url)), new Set([
+    "/api/media?status=watched&favorite=true",
+    "/api/stats",
+  ]));
+});
+
+test("clear filters resets status and favorites controls", async () => {
+  const fake = createMediaTrackingFetch([mediaItem()]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+  document.getElementById("status-filter").value = "started";
+  document.getElementById("favorites-only").checked = true;
+  document.getElementById("status-filter").dispatch("change");
+  await flush();
+  fake.calls.length = 0;
+
+  document.getElementById("clear-filters").click();
+  await flush();
+
+  assert.equal(document.getElementById("status-filter").value, "all");
+  assert.equal(document.getElementById("favorites-only").checked, false);
+  assert.deepEqual(new Set(fake.calls.map((call) => call.url)), new Set([
+    "/api/media",
+    "/api/stats",
+  ]));
+});
+
+test("started, prior-play, and manual labels render distinctly", async () => {
+  const started = mediaItem({
+    id: "00000000-0000-0000-0000-000000000002",
+    title: "Started film",
+    watch_status: "started",
+    started_at: "2026-10-15T11:00:00.000000Z",
+    watched_at: null,
+    play_count: 0,
+    rewatch_count: 0,
+  });
+  const prior = mediaItem({
+    id: "00000000-0000-0000-0000-000000000003",
+    title: "Resumed film",
+    watch_status: "started",
+    started_at: "2026-10-15T12:00:00.000000Z",
+    play_count: 2,
+    rewatch_count: 1,
+  });
+  const manual = mediaItem({
+    id: "00000000-0000-0000-0000-000000000004",
+    title: "Manual film",
+    watch_status: "watched",
+    watched_at: null,
+    manually_watched: true,
+    manually_watched_at: "2026-10-15T08:00:00.000000Z",
+    play_count: 0,
+    rewatch_count: 0,
+  });
+  const manualVerified = mediaItem({
+    id: "00000000-0000-0000-0000-000000000005",
+    title: "Manual plus verified",
+    watch_status: "watched",
+    manually_watched: true,
+    manually_watched_at: "2026-10-15T09:00:00.000000Z",
+    play_count: 1,
+    rewatch_count: 0,
+  });
+  const fake = createMediaTrackingFetch([started, prior, manual, manualVerified]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const nodes = descendantElements(document.getElementById("media-list"));
+  assert(nodes.some((node) => node.textContent === "Started film"));
+  assert(nodes.some((node) => /^Started /.test(node.textContent)));
+  assert(nodes.some((node) => node.textContent === "Previously watched 2 times · 1 rewatches"));
+  assert(nodes.some((node) => node.textContent === "Marked watched manually"));
+  assert(nodes.some((node) => node.textContent === "Watched once"));
+  const startedCard = nodes.find((node) => node.className === "media-card" && node.children.some((child) => child.children?.some?.((leaf) => leaf.textContent === "Started film")));
+  assert.notEqual(startedCard, undefined);
+});
+
+test("heart buttons have accessible favorite state and names", async () => {
+  const favorite = mediaItem({ is_favorite: true });
+  const fake = createMediaTrackingFetch([favorite, mediaItem({ id: "00000000-0000-0000-0000-000000000002", title: "Second" })]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const buttons = descendantElements(document.getElementById("media-list"))
+    .filter((node) => node.tagName === "BUTTON" && node.className === "favorite-button");
+  assert.equal(buttons.length, 2);
+  const [favorited, plain] = buttons;
+  assert.equal(favorited.attributes["aria-pressed"], "true");
+  assert.equal(favorited.attributes["aria-label"], "Remove A film from favorites");
+  assert.equal(plain.attributes["aria-pressed"], "false");
+  assert.equal(plain.attributes["aria-label"], "Add Second to favorites");
+});
+
+test("Mark watched appears only on started movie cards", async () => {
+  const started = mediaItem({ watch_status: "started", started_at: "2026-10-15T11:00:00.000000Z", watched_at: null, play_count: 0, rewatch_count: 0 });
+  const episode = mediaItem({ id: "2", kind: "tv", title: "Episode", series_title: "Series", watch_status: "watched", play_count: 1, rewatch_count: 0, poster_url: null, imdb_url: null });
+  const fake = createMediaTrackingFetch([started, episode]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const nodes = descendantElements(document.getElementById("media-list"));
+  const markButtons = nodes.filter((node) => node.className === "action-mark-watched");
+  assert.equal(markButtons.length, 1);
+  const episodeCard = nodes.find((node) => node.className === "media-card" && node.children.some((child) => child.children?.some?.((leaf) => leaf.textContent === "Series")));
+  assert.notEqual(episodeCard, undefined);
+  assert(!descendantElements(episodeCard).some((node) => node.className === "action-mark-watched"));
+  assert(!nodes.some((node) => node.className === "action-undo-manual"));
+});
+
+test("favorite PATCH disables the control and reloads server-confirmed state", async () => {
+  const started = mediaItem({ watch_status: "started", started_at: "2026-10-15T11:00:00.000000Z", watched_at: null, play_count: 0, rewatch_count: 0, poster_url: null, imdb_url: null });
+  const fake = createMediaTrackingFetch([started]);
+  let gateResolve;
+  fake.gate = new Promise((resolve) => { gateResolve = resolve; });
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const heartButton = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "favorite-button");
+  heartButton.click();
+  await flush();
+
+  const patchCall = fake.calls.find((call) => call.method === "PATCH");
+  assert.deepEqual(patchCall.body, { is_favorite: true });
+  assert.equal(heartButton.disabled, true);
+
+  gateResolve();
+  await flush();
+  assert.equal(heartButton.disabled, false);
+  const refreshed = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "favorite-button");
+  assert.equal(refreshed.attributes["aria-pressed"], "true");
+  assert.equal(refreshed.attributes["aria-label"], "Remove A film from favorites");
+  assert(fake.calls.some((call) => call.url === "/api/media"));
+  assert(fake.calls.some((call) => call.url === "/api/stats"));
+});
+
+test("failed PATCH shows a card alert and Retry resends the same body", async () => {
+  const fake = createMediaTrackingFetch([mediaItem()]);
+  fake.failNextPatch = true;
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const heartButton = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "favorite-button");
+  heartButton.click();
+  await flush();
+
+  const alert = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "media-action-error");
+  assert.equal(alert.hidden, false);
+  assert.equal(alert.attributes.role, "alert");
+  assert.equal(heartButton.disabled, false);
+
+  const retry = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "action-retry");
+  assert.equal(retry.textContent, "Retry");
+  retry.click();
+  await flush();
+
+  const patches = fake.calls.filter((call) => call.method === "PATCH");
+  assert.equal(patches.length, 2);
+  assert.deepEqual(patches[1].body, { is_favorite: true });
+  assert.equal(alert.hidden, true);
+  const refreshed = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "favorite-button");
+  assert.equal(refreshed.attributes["aria-pressed"], "true");
+});
+
+test("pure rendering helpers cover prior-play labels", () => {
+  assert.equal(priorPlaysLabel(0, 0), "Previously watched once");
+  assert.equal(priorPlaysLabel(1, 0), "Previously watched once");
+  assert.equal(priorPlaysLabel(5, 4), "Previously watched 5 times · 4 rewatches");
 });

@@ -386,6 +386,15 @@ td.activity-cell {
   border-radius: 0.45rem;
 }
 
+.filter-field input[type="checkbox"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  align-self: end;
+  accent-color: var(--accent);
+}
+
 @supports (-webkit-touch-callout: none) {
   .filter-field input[type="date"] {
     -webkit-appearance: none;
@@ -564,6 +573,58 @@ td.activity-cell {
   color: var(--ink);
   font-size: 0.84rem;
   font-weight: 600;
+}
+
+.media-manual-date {
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+
+.media-actions .button,
+.media-actions button {
+  min-height: 2.1rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 0.45rem;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.media-actions button:hover:not(:disabled),
+.media-actions button:focus-visible {
+  border-color: var(--accent-dark);
+  color: var(--accent-dark);
+}
+
+.media-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.favorite-button {
+  font-size: 0.95rem;
+}
+
+.media-action-error {
+  margin-top: 0.5rem;
+  color: var(--danger, #b42318);
+  font-size: 0.84rem;
+}
+
+.media-action-error .action-retry {
+  margin-left: 0.35rem;
 }
 
 .imdb-link {
