@@ -12,7 +12,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from tana.app_types import get_session
-from tana.models import CompletedPlayback, SyncState, WatchedItem
+from tana.models import SyncState, WatchedItem, WatchEvent
 from tana.posters import PosterError
 from tana.time_utils import format_utc, resolve_local_time
 
@@ -99,6 +99,8 @@ class SyncStatusResponse(BaseModel):
     items_seen: int
     items_imported: int
     last_error: str | None
+    activity_cursor: int | None
+    activity_log_enabled: bool
 
 
 class ConfigResponse(BaseModel):
@@ -340,9 +342,9 @@ async def get_activity(
     end_instant = _date_boundary(today + timedelta(days=1), timezone)
     timestamps = (
         await session.exec(
-            select(CompletedPlayback.completed_at).where(
-                CompletedPlayback.completed_at >= start_instant,
-                CompletedPlayback.completed_at < end_instant,
+            select(WatchEvent.event_date).where(
+                WatchEvent.event_date >= start_instant,
+                WatchEvent.event_date < end_instant,
             )
         )
     ).all()
@@ -388,6 +390,8 @@ async def get_sync_status(
             items_seen=0,
             items_imported=0,
             last_error=None,
+            activity_cursor=None,
+            activity_log_enabled=True,
         )
     return SyncStatusResponse(
         status=state.status,
@@ -397,6 +401,8 @@ async def get_sync_status(
         items_seen=state.items_seen,
         items_imported=state.items_imported,
         last_error=state.last_error,
+        activity_cursor=state.activity_cursor,
+        activity_log_enabled=state.activity_log_enabled,
     )
 
 

@@ -1,0 +1,20 @@
+[
+  {
+    "Id": 2569,
+    "Name": "admin is playing PlayedItem-0 on Mac",
+    "Type": "VideoPlayback",
+    "ItemId": "cbc859c28d5355be90bc22cbe50f42d6",
+    "Date": "2026-10-17T16:09:58.1348109Z",
+    "UserId": "11111111111141118111111111111111",
+    "Severity": "Information"
+  },
+  {
+    "Id": 2570,
+    "Name": "admin has finished playing PlayedItem-0 on Mac",
+    "Type": "VideoPlaybackStopped",
+    "ItemId": "cbc859c28d5355be90bc22cbe50f42d6",
+    "Date": "2026-10-17T16:10:14.0867009Z",
+    "UserId": "11111111111141118111111111111111",
+    "Severity": "Information"
+  }
+]

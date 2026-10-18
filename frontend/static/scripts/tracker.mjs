@@ -366,28 +366,43 @@ export function createTracker({
       );
     };
 
-    if (item.kind === "movie" && item.watch_status === "started") {
-      const mark = element(document, "button", "action-mark-watched", "Mark watched");
-      mark.setAttribute("type", "button");
-      mark.addEventListener("click", () =>
-        runAction({ manually_watched: true }, [mark]),
+    if (item.kind === "movie") {
+      // One flag button replaces the old text controls: filled when the movie is
+      // watched (verified history or manual marker), empty otherwise. The click
+      // toggles exactly the local manual-watched marker; a purely verified movie
+      // that is not started and not manually marked has no valid transition and
+      // keeps a filled, non-clickable flag.
+      const watched = item.play_count > 0 || item.manually_watched;
+      // An empty flag can only be filled for a fresh start; a filled flag can
+      // only be emptied when a manual marker exists to undo. Purely verified
+      // history (and a re-watch with prior plays) has no local toggle.
+      const canToggle =
+        item.manually_watched ||
+        (item.watch_status === "started" && item.play_count === 0);
+      const flag = element(document, "button", "flag-button", watched ? "\u2691" : "\u2690");
+      flag.setAttribute("type", "button");
+      flag.setAttribute("aria-pressed", String(watched));
+      flag.setAttribute(
+        "aria-label",
+        `${watched ? "Unmark" : "Mark"} ${displayTitle} ${watched ? "as " : ""}watched`,
       );
-      actions.append(mark);
-    }
-    if (item.kind === "movie" && item.manually_watched) {
-      const undo = element(document, "button", "action-undo-manual", "Undo manual mark");
-      undo.setAttribute("type", "button");
-      undo.addEventListener("click", () =>
-        runAction({ manually_watched: false }, [undo]),
-      );
-      actions.append(undo);
+      if (!canToggle) {
+        flag.disabled = true;
+        flag.title = "This movie is part of the verified watch history";
+      } else {
+        flag.addEventListener("click", () =>
+          runAction({ manually_watched: !item.manually_watched }, [flag]),
+        );
+      }
+      actions.append(flag);
     }
 
+    // Heart icon: filled when favorited, empty otherwise, mirroring the flag.
     const favorite = element(
       document,
       "button",
       "favorite-button",
-      item.is_favorite ? "Remove favorite" : "Add favorite",
+      item.is_favorite ? "\u2665" : "\u2661",
     );
     favorite.setAttribute("type", "button");
     favorite.setAttribute("aria-pressed", String(item.is_favorite));

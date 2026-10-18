@@ -614,7 +614,27 @@ td.activity-cell {
 }
 
 .favorite-button {
-  font-size: 0.95rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.35rem 0.6rem;
+}
+
+.favorite-button[aria-pressed="true"] {
+  color: var(--accent-dark);
+}
+
+.flag-button {
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0.35rem 0.6rem;
+}
+
+.flag-button[aria-pressed="true"] {
+  color: var(--accent-dark);
+}
+
+.flag-button:disabled {
+  color: var(--ink);
 }
 
 .media-action-error {

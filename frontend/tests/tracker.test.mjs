@@ -690,24 +690,78 @@ test("heart buttons have accessible favorite state and names", async () => {
   const [favorited, plain] = buttons;
   assert.equal(favorited.attributes["aria-pressed"], "true");
   assert.equal(favorited.attributes["aria-label"], "Remove A film from favorites");
+  assert.equal(favorited.textContent, "\u2665");
   assert.equal(plain.attributes["aria-pressed"], "false");
   assert.equal(plain.attributes["aria-label"], "Add Second to favorites");
+  assert.equal(plain.textContent, "\u2661");
 });
 
-test("Mark watched appears only on started movie cards", async () => {
-  const started = mediaItem({ watch_status: "started", started_at: "2026-10-15T11:00:00.000000Z", watched_at: null, play_count: 0, rewatch_count: 0 });
-  const episode = mediaItem({ id: "2", kind: "tv", title: "Episode", series_title: "Series", watch_status: "watched", play_count: 1, rewatch_count: 0, poster_url: null, imdb_url: null });
-  const fake = createMediaTrackingFetch([started, episode]);
+test("flag buttons reflect watched state on movie cards only", async () => {
+  const started = mediaItem({
+    id: "00000000-0000-0000-0000-000000000002",
+    title: "Started film",
+    watch_status: "started",
+    started_at: "2026-10-15T11:00:00.000000Z",
+    watched_at: null,
+    play_count: 0,
+    rewatch_count: 0,
+  });
+  const prior = mediaItem({
+    id: "00000000-0000-0000-0000-000000000003",
+    title: "Resumed film",
+    watch_status: "started",
+    started_at: "2026-10-15T12:00:00.000000Z",
+    play_count: 2,
+    rewatch_count: 1,
+  });
+  const manual = mediaItem({
+    id: "00000000-0000-0000-0000-000000000004",
+    title: "Manual film",
+    watch_status: "watched",
+    manually_watched: true,
+    manually_watched_at: "2026-10-15T08:00:00.000000Z",
+    play_count: 0,
+    rewatch_count: 0,
+  });
+  const episode = mediaItem({ id: "5", kind: "tv", title: "Episode", series_title: "Series", watch_status: "watched", play_count: 1, rewatch_count: 0, poster_url: null, imdb_url: null });
+  const fake = createMediaTrackingFetch([started, prior, manual, episode]);
   const { document, tracker } = createHarness(fake.handler);
   await tracker.start();
 
   const nodes = descendantElements(document.getElementById("media-list"));
-  const markButtons = nodes.filter((node) => node.className === "action-mark-watched");
-  assert.equal(markButtons.length, 1);
-  const episodeCard = nodes.find((node) => node.className === "media-card" && node.children.some((child) => child.children?.some?.((leaf) => leaf.textContent === "Series")));
+  const flags = nodes.filter((node) => node.className === "flag-button");
+  assert.equal(flags.length, 3);
+
+  const cardFor = (title) =>
+    nodes.find(
+      (node) =>
+        node.className === "media-card" &&
+        node.children.some((child) =>
+          child.children?.some?.((leaf) => leaf.textContent.startsWith(title)),
+        ),
+    );
+  const flagIn = (card) =>
+    descendantElements(card).find((node) => node.className === "flag-button");
+
+  // A fresh start: flag empty, clickable, accessible mark name.
+  const freshFlag = flagIn(cardFor("Started film"));
+  assert.equal(freshFlag.attributes["aria-pressed"], "false");
+  assert.equal(freshFlag.attributes["aria-label"], "Mark Started film watched");
+  assert.equal(freshFlag.disabled, false);
+  // A re-watch with prior verified plays: filled by history, no local toggle.
+  const priorFlag = flagIn(cardFor("Resumed film"));
+  assert.equal(priorFlag.attributes["aria-pressed"], "true");
+  assert.equal(priorFlag.attributes["aria-label"], "Unmark Resumed film as watched");
+  assert.equal(priorFlag.disabled, true);
+  // A manually marked movie: filled with an undo action.
+  const manualFlag = flagIn(cardFor("Manual film"));
+  assert.equal(manualFlag.attributes["aria-pressed"], "true");
+  assert.equal(manualFlag.attributes["aria-label"], "Unmark Manual film as watched");
+  assert.equal(manualFlag.disabled, false);
+
+  const episodeCard = cardFor("Series");
   assert.notEqual(episodeCard, undefined);
-  assert(!descendantElements(episodeCard).some((node) => node.className === "action-mark-watched"));
-  assert(!nodes.some((node) => node.className === "action-undo-manual"));
+  assert(!descendantElements(episodeCard).some((node) => node.className === "flag-button"));
 });
 
 test("favorite PATCH disables the control and reloads server-confirmed state", async () => {
@@ -737,6 +791,27 @@ test("favorite PATCH disables the control and reloads server-confirmed state", a
   assert(fake.calls.some((call) => call.url === "/api/media"));
   assert(fake.calls.some((call) => call.url === "/api/stats"));
 });
+
+test("flag PATCH marks a fresh start watched and confirms server state", async () => {
+  const started = mediaItem({ watch_status: "started", started_at: "2026-10-15T11:00:00.000000Z", watched_at: null, play_count: 0, rewatch_count: 0, poster_url: null, imdb_url: null });
+  const fake = createMediaTrackingFetch([started]);
+  const { document, tracker } = createHarness(fake.handler);
+  await tracker.start();
+
+  const flag = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "flag-button");
+  flag.click();
+  await flush();
+  await flush();
+
+  const patchCall = fake.calls.find((call) => call.method === "PATCH");
+  assert.deepEqual(patchCall.body, { manually_watched: true });
+  const refreshed = descendantElements(document.getElementById("media-list"))
+    .find((node) => node.className === "flag-button");
+  assert.equal(refreshed.attributes["aria-pressed"], "true");
+  assert.equal(refreshed.attributes["aria-label"], "Unmark A film as watched");
+});
+
 
 test("failed PATCH shows a card alert and Retry resends the same body", async () => {
   const fake = createMediaTrackingFetch([mediaItem()]);

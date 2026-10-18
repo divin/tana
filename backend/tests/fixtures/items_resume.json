@@ -1,0 +1,36 @@
+[
+  {
+    "Name": "Played Episode 2",
+    "Id": "ff7199b2-236f-5b36-8d77-810796c97e4b",
+    "Container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "PremiereDate": "1994-02-17T00:00:00.0000000Z",
+    "ChannelId": null,
+    "RunTimeTicks": 11966954890,
+    "ProductionYear": 1994,
+    "IndexNumber": 1,
+    "ParentIndexNumber": 1,
+    "IsFolder": false,
+    "Type": "Episode",
+    "UserData": {
+      "PlayedPercentage": 38.46,
+      "PlaybackPositionTicks": 4602687810,
+      "PlayCount": 3,
+      "IsFavorite": false,
+      "LastPlayedDate": "2026-10-01T16:01:35.0208181Z",
+      "Played": false,
+      "ItemId": "ff7199b2236f5b368d77810796c97e4b"
+    },
+    "SeriesName": "Series 1",
+    "SeriesPrimaryImageTag": "a730cf9259196a42b93c77dd99885448",
+    "SeasonName": "Season 1",
+    "VideoType": "VideoFile",
+    "ImageTags": {
+      "Primary": "039150ebd4c5113a56a477b08ad611e9"
+    },
+    "BackdropImageTags": [],
+    "ParentLogoImageTag": "a730cf9259196a42b93c77dd99885448",
+    "ParentPrimaryImageTag": "d2db0aead89d4f3929864bfb5f451bc4",
+    "LocationType": "FileSystem",
+    "MediaType": "Video"
+  }
+]

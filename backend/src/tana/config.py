@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     TZ: str
     SYNC_TIME: str = "03:00"
     PLAYBACK_COMPLETION_THRESHOLD: float = 1.0
+    JELLYFIN_ACTIVITY_LOG_ENABLED: bool = True
     LOG_LEVEL: str = "INFO"
 
     @field_validator("JELLYFIN_URL")

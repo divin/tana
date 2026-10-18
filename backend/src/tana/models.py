@@ -81,13 +81,63 @@ class WatchedItem(SQLModel, table=True):
     updated_at: str = Field(sa_type=String)
 
 
-class CompletedPlayback(SQLModel, table=True):
-    __tablename__ = "completed_playbacks"
+class WatchEvent(SQLModel, table=True):
+    """One completed-play event.
+
+    ``source='activity_log'`` rows come from the Jellyfin activity log and carry
+    the server's integer log entry id. ``source='userdata'`` rows are the
+    aggregate approximation created from the per-item ``PlayCount``/
+    ``LastPlayedDate`` diff for plays outside (or without) the activity log.
+    ``event_date`` is the UTC completion instant: exact for activity-log rows,
+    the item's ``LastPlayedDate`` for aggregate rows.
+    """
+
+    __tablename__ = "watch_events"
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('activity_log', 'userdata')",
+            name="ck_watch_events_source",
+        ),
+        CheckConstraint(
+            "(source = 'activity_log' AND log_entry_id IS NOT NULL) OR "
+            "(source = 'userdata' AND log_entry_id IS NULL)",
+            name="ck_watch_events_log_entry_consistency",
+        ),
+        CheckConstraint(
+            "log_entry_id IS NULL OR log_entry_id >= 0",
+            name="ck_watch_events_log_entry_id_nonnegative",
+        ),
+        Index("ix_watch_events_item", "jellyfin_id"),
+        Index("ix_watch_events_date", "event_date"),
+    )
 
     event_key: str = Field(primary_key=True, sa_type=String)
     jellyfin_id: str = Field(foreign_key="watched_items.jellyfin_id", sa_type=String)
-    session_id: str | None = Field(default=None, sa_type=String)
-    completed_at: str = Field(sa_type=String)
+    source: str = Field(sa_type=String)
+    event_date: str = Field(sa_type=String)
+    log_entry_id: int | None = Field(default=None)
+
+
+class UserDataSnapshot(SQLModel, table=True):
+    """Last-seen per-item Jellyfin UserData, backing the Tier 1 diff."""
+
+    __tablename__ = "userdata_snapshots"
+    __table_args__ = (
+        CheckConstraint("play_count >= 0", name="ck_userdata_snapshots_play_count"),
+        CheckConstraint("played IN (0, 1)", name="ck_userdata_snapshots_played"),
+        CheckConstraint(
+            "position_ticks IS NULL OR position_ticks >= 0",
+            name="ck_userdata_snapshots_position_ticks",
+        ),
+    )
+
+    jellyfin_id: str = Field(primary_key=True, sa_type=String)
+    play_count: int = Field(default=0)
+    last_played_date: str | None = Field(default=None, sa_type=String)
+    played: bool = Field(default=False)
+    played_percentage: float | None = Field(default=None)
+    position_ticks: int | None = Field(default=None)
+    synced_at: str = Field(sa_type=String)
 
 
 class PosterCache(SQLModel, table=True):
@@ -116,6 +166,10 @@ class SyncState(SQLModel, table=True):
         ),
         CheckConstraint("items_seen >= 0", name="ck_sync_state_items_seen"),
         CheckConstraint("items_imported >= 0", name="ck_sync_state_items_imported"),
+        CheckConstraint(
+            "activity_cursor IS NULL OR activity_cursor >= 0",
+            name="ck_sync_state_activity_cursor_nonnegative",
+        ),
     )
 
     id: int = Field(default=1, primary_key=True)
@@ -126,3 +180,5 @@ class SyncState(SQLModel, table=True):
     items_seen: int = Field(default=0)
     items_imported: int = Field(default=0)
     status: str = Field(default="never", sa_type=String)
+    activity_cursor: int | None = Field(default=None)
+    activity_log_enabled: bool = Field(default=True)

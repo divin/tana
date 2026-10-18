@@ -66,10 +66,19 @@ async def test_startup_sync_is_background_and_scheduler_is_configured(
         def __init__(self, settings) -> None:
             self.settings = settings
 
-        async def fetch_library_items(self):
+        async def fetch_played_items(self):
             entered_fetch.set()
             await continue_fetch.wait()
             return [], 0
+
+        async def fetch_resume_items(self):
+            return []
+
+        async def fetch_activity_window(self):
+            return [], None
+
+        async def fetch_item_details(self, item_id):
+            return None
 
         async def close(self) -> None:
             return

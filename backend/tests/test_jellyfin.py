@@ -30,6 +30,16 @@ def settings() -> Settings:
     )
 
 
+def user_data(**overrides: Any) -> dict[str, Any]:
+    return {
+        "Played": True,
+        "PlayCount": 1,
+        "LastPlayedDate": "2026-10-01T10:00:00.000000Z",
+        "PlaybackPositionTicks": 0,
+        **overrides,
+    }
+
+
 def movie_dto(
     *, item_id: str = MOVIE_ID, name: str = "Example movie"
 ) -> dict[str, Any]:
@@ -39,6 +49,7 @@ def movie_dto(
         "Type": "Movie",
         "ImageTags": {"Primary": "primary-tag"},
         "ProviderIds": {"Imdb": "tt1234567"},
+        "UserData": user_data(),
     }
 
 
@@ -52,6 +63,7 @@ def episode_dto() -> dict[str, Any]:
         "SeriesPrimaryImageTag": "series-primary-tag",
         "ParentIndexNumber": 2,
         "IndexNumber": 5,
+        "UserData": user_data(),
     }
 
 
@@ -84,17 +96,18 @@ async def test_client_requests_both_item_types_with_verified_auth_and_fields() -
 
     client = client_for(handler)
     try:
-        items, seen = await client.fetch_library_items()
+        items, seen = await client.fetch_played_items()
     finally:
         await client.close()
 
     assert seen == 2
     assert [item.kind for item in items] == ["movie", "tv"]
-    assert calls[0].url.path == "/base/Items"
+    assert calls[0].url.path == f"/base/Users/{USER_ID}/Items"
     assert calls[0].url.params["userId"] == USER_ID
     assert calls[0].url.params["includeItemTypes"] == "Movie"
     assert calls[0].url.params["recursive"] == "true"
-    assert calls[0].url.params["fields"] == "ProviderIds"
+    assert calls[0].url.params["filters"] == "IsPlayed"
+    assert calls[0].url.params["fields"] == "UserData,ProviderIds,DateCreated"
     assert calls[0].url.params["startIndex"] == "0"
     assert calls[0].url.params["limit"] == "500"
     assert (
@@ -109,6 +122,7 @@ async def test_client_requests_both_item_types_with_verified_auth_and_fields() -
     assert items[0].title == "Example movie"
     assert items[0].poster_tag == "primary-tag"
     assert items[0].imdb_id == "tt1234567"
+    assert items[0].play_count == 1
     assert items[1].series_title == "Series name"
     assert items[1].series_id == "00000000-0000-0000-0000-000000000222"
     assert items[1].series_poster_tag == "series-primary-tag"
@@ -136,7 +150,7 @@ async def test_client_paginates_and_deduplicates_last_valid_record() -> None:
 
     client = client_for(handler)
     try:
-        items, seen = await client.fetch_library_items()
+        items, seen = await client.fetch_played_items()
     finally:
         await client.close()
 
@@ -158,6 +172,7 @@ async def test_invalid_items_are_skipped_and_camel_case_is_accepted() -> None:
         "type": "Movie",
         "imageTags": {"primary": "tag"},
         "providerIds": {"imdb": "invalid"},
+        "userData": user_data(),
     }
     invalid = movie_dto()
     del invalid["Name"]
@@ -169,7 +184,7 @@ async def test_invalid_items_are_skipped_and_camel_case_is_accepted() -> None:
 
     client = client_for(handler)
     try:
-        items, seen = await client.fetch_library_items()
+        items, seen = await client.fetch_played_items()
     finally:
         await client.close()
 
@@ -344,6 +359,12 @@ async def test_fetch_item_details_returns_single_item_metadata() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        user_data = {
+            "Played": True,
+            "PlayCount": 1,
+            "LastPlayedDate": "2026-10-01T10:00:00.000000Z",
+            "PlaybackPositionTicks": 0,
+        }
         if request.url.path == f"/base/Items/{EPISODE_ID}":
             return httpx.Response(
                 200,
@@ -356,6 +377,7 @@ async def test_fetch_item_details_returns_single_item_metadata() -> None:
                     "SeriesPrimaryImageTag": "series-tag",
                     "ParentIndexNumber": 1,
                     "IndexNumber": 1,
+                    "UserData": user_data,
                 },
             )
         return httpx.Response(
@@ -366,6 +388,7 @@ async def test_fetch_item_details_returns_single_item_metadata() -> None:
                 "Type": "Movie",
                 "ImageTags": {"Primary": "single-tag"},
                 "ProviderIds": {"Imdb": "tt1234567"},
+                "UserData": user_data,
             },
         )
 
@@ -385,7 +408,9 @@ async def test_fetch_item_details_returns_single_item_metadata() -> None:
         f"/base/Items/{EPISODE_ID}",
     ]
     assert all(r.url.params["userId"] == USER_ID for r in requests)
-    assert all(r.url.params["fields"] == "ProviderIds" for r in requests)
+    assert all(r.url.params["fields"] == "UserData,ProviderIds" for r in requests)
+    assert movie.play_count == 1
+    assert movie.last_played_date == "2026-10-01T10:00:00.000000Z"
     assert episode is not None
     assert episode.kind == "tv"
     assert episode.series_poster_tag == "series-tag"
@@ -406,3 +431,140 @@ async def test_fetch_item_details_ignores_unsupported_item_types() -> None:
         await client.close()
 
     assert result is None
+
+
+def load_fixture(name: str) -> Any:
+    import json
+    from pathlib import Path
+
+    return json.loads((Path(__file__).parent / "fixtures" / name).read_text())
+
+
+@pytest.mark.asyncio
+async def test_fetch_played_items_parses_live_shaped_responses() -> None:
+    movie_dto = load_fixture("items_played_movie.json")
+    episode_dto = load_fixture("items_played_episode.json")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        item_type = request.url.params["includeItemTypes"]
+        body = page([movie_dto] if item_type == "Movie" else [episode_dto], 1)
+        return httpx.Response(200, json=body)
+
+    client = client_for(handler)
+    try:
+        items, seen = await client.fetch_played_items()
+    finally:
+        await client.close()
+
+    assert seen == 2
+    assert len(items) == 2
+    movie = next(item for item in items if item.kind == "movie")
+    episode = next(item for item in items if item.kind == "tv")
+    assert movie.played is True
+    assert movie.play_count == 1
+    # 3-fraction-digit server timestamps are normalized to six digits + Z.
+    assert movie.last_played_date == "2026-08-28T18:31:36.438000Z"
+    assert episode.played is True
+    assert episode.series_title == "Series 0"  # sanitized fixture name
+    assert episode.season_number == 1
+    assert episode.episode_number == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_played_items_skips_items_without_user_data() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        item_type = request.url.params["includeItemTypes"]
+        return httpx.Response(
+            200, json=page([{"Id": MOVIE_ID, "Name": "No", "Type": item_type}], 1)
+        )
+
+    client = client_for(handler)
+    try:
+        items, _seen = await client.fetch_played_items()
+    finally:
+        await client.close()
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_resume_items_parses_live_shaped_response() -> None:
+    resume_dto = load_fixture("items_resume.json")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"Items": resume_dto})
+
+    client = client_for(handler)
+    try:
+        items = await client.fetch_resume_items()
+    finally:
+        await client.close()
+
+    assert len(items) == 1
+    episode = items[0]
+    assert episode.kind == "tv"
+    assert episode.played is False
+    assert episode.play_count == 3
+    # Jellyfin's 0-100 percentage is normalized to a 0-1 fraction.
+    assert episode.played_percentage == pytest.approx(0.3846)
+    assert episode.position_ticks == 4602687810
+    # Seven fractional digits are normalized to six.
+    assert episode.last_played_date == "2026-10-01T16:01:35.020818Z"
+
+
+@pytest.mark.asyncio
+async def test_fetch_activity_entries_parses_and_reports_max_raw_id() -> None:
+    [start_dto, stop_dto] = load_fixture("activity_log_entries.json")
+    noise = {"Id": 2571, "Type": "SessionStarted", "Name": "online"}
+    page_body = {"Items": [start_dto, stop_dto, noise], "TotalRecordCount": 3}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=page_body)
+
+    client = client_for(handler)
+    try:
+        entries, total, max_raw_id, raw_count = await client.fetch_activity_entries()
+    finally:
+        await client.close()
+
+    assert raw_count == 3
+
+    assert total == 3
+    # The session-noise entry is dropped; its raw id still advances the cursor.
+    assert max_raw_id == 2571
+    assert len(entries) == 2
+    start, stop = entries
+    assert start.kind == "start"
+    assert stop.kind == "stop"
+    # Compact log UUIDs are canonicalized to hyphenated form.
+    assert start.item_id == stop.item_id
+    assert "-" in start.item_id
+    assert start.user_id == "11111111-1111-4111-8111-111111111111"
+    # Seven fractional digits truncated to six (microsecond resolution).
+    assert stop.occurred_at == "2026-10-17T16:10:14.086700Z"
+    assert stop.title_hint == "PlayedItem-0"
+
+
+@pytest.mark.asyncio
+async def test_fetch_activity_window_scans_all_retained_entries() -> None:
+    start_dto = load_fixture("activity_log_entries.json")[0]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offset = int(request.url.params["startIndex"])
+        if offset == 0:
+            items = [{**start_dto, "Id": id} for id in (103, 102, 101, 100)]
+        elif offset == 4:
+            # A live log that grows while we scan: the scan continues past the
+            # reported total because it terminates only on an empty page.
+            items = [{**start_dto, "Id": 99}]
+        else:
+            items = []
+        return httpx.Response(200, json={"Items": items, "TotalRecordCount": 8})
+
+    client = client_for(handler)
+    try:
+        all_entries, max_id = await client.fetch_activity_window()
+    finally:
+        await client.close()
+
+    assert [e.entry_id for e in all_entries] == [103, 102, 101, 100, 99]
+    assert max_id == 103

@@ -11,7 +11,7 @@ from pydantic import SecretStr
 from tana.app import create_app
 from tana.config import Settings
 from tana.database import Database
-from tana.models import CompletedPlayback, SyncState, WatchedItem
+from tana.models import SyncState, WatchedItem, WatchEvent
 from tana.time_utils import format_utc, resolve_local_time
 
 
@@ -381,25 +381,32 @@ async def test_activity_returns_365_local_days_and_counts_items_not_plays(
             await session.flush()
             session.add_all(
                 [
-                    CompletedPlayback(
+                    WatchEvent(
                         event_key="event-movie-first",
                         jellyfin_id=movie_id,
-                        completed_at=today_start,
+                        source="userdata",
+                        event_date=today_start,
                     ),
-                    CompletedPlayback(
+                    WatchEvent(
                         event_key="event-movie-rewatch",
                         jellyfin_id=movie_id,
-                        completed_at=today_noon,
+                        source="activity_log",
+                        event_date=today_noon,
+                        log_entry_id=1,
                     ),
-                    CompletedPlayback(
+                    WatchEvent(
                         event_key="event-episode",
                         jellyfin_id=episode_id,
-                        completed_at=today_noon,
+                        source="activity_log",
+                        event_date=today_noon,
+                        log_entry_id=2,
                     ),
-                    CompletedPlayback(
+                    WatchEvent(
                         event_key="event-yesterday",
                         jellyfin_id=yesterday_id,
-                        completed_at=yesterday_noon,
+                        source="activity_log",
+                        event_date=yesterday_noon,
+                        log_entry_id=3,
                     ),
                 ]
             )

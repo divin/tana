@@ -4,7 +4,7 @@
 
 # Tana 🎬
 
-**Tana (棚, たな, “shelf” in Japanese) is a privacy-friendly, self-hosted watch-history tracker for Jellyfin.** It records completed movie and episode plays server-side from Jellyfin's Playback Stop webhook, tracks in-progress movie starts, lets you favorite items and manually mark a started movie as watched, stores everything in a local SQLite database, and serves a small web UI with statistics, filters, and poster images. All data stays on your own host; the only outbound traffic is to your Jellyfin server for metadata and posters.
+**Tana (棚, たな, “shelf” in Japanese) is a privacy-friendly, self-hosted watch-history tracker for Jellyfin.** It reconstructs your watch history directly from the Jellyfin API (no webhook plugin needed), tracks in-progress movie starts, lets you favorite items and manually mark a started movie as watched, stores everything in a local SQLite database, and serves a small web UI with statistics, filters, and poster images. All data stays on your own host; the only outbound traffic is to your Jellyfin server.
 
 AI tools were used during development.
 
@@ -16,14 +16,13 @@ There are other great self-hosted tracking projects, such as [Yamtrack](https://
 
 ```mermaid
 flowchart LR
-    A[Jellyfin] -->|Playback Start + Stop webhooks| B[Webhook receiver]
+    A[Jellyfin API] -->|played items + activity log| B[Sync engine]
     B --> C[(SQLite database)]
-    D[Jellyfin metadata sync] --> C
     C --> E[Web UI]
     E -. poster fetch .-> A
 ```
 
-Confirmed Playback Stop completion events are the only source of watched rows, play counts, and heatmap activity. Tana never imports Jellyfin's `Played` history or `PlayCount`: tracking starts empty, and only the configured user's finished plays create counted rows. Movie Playback Start events add a separate *started* state, and local favorite/manual-watched actions are stored as first-class, upgrade-safe flags. A webhook receiver stores accepted events, a daily sync refreshes poster and IMDb metadata from Jellyfin, and the Zola-built UI renders stats, a started/watched list, and media.
+A scheduled sync reads the configured user's Movies/Episodes and, when the API key has dashboard access, Jellyfin's activity log (a 30-day session window by default). Jellyfin's per-item `Played` flag (and `PlayedPercentage`) is the only completion fact — its `PlayCount` counts playback *starts*, so Tana never treats it as a completion count. Every recent playback session is paired with its start and measured against the item's runtime, so sessions that plausibly finished get an exact date while brief re-opens are excluded; older or unverifiable plays are kept as an estimate bounded by `PlayCount` minus the clearly-partial sessions observed in the window. In-progress movies get a separate *started* state, local favorites and manual-watched actions are first-class flags, and the Zola-built UI renders stats, a started/watched list, and media.
 
 ## 🚀 Quick start
 
@@ -43,23 +42,40 @@ Confirmed Playback Stop completion events are the only source of watched rows, p
    docker compose logs -f tana
    ```
 
-The example Compose file pulls the published `ghcr.io/divin/tana` image; no local Docker build is needed. It maps host port `8000` to container port `8000` on all host interfaces. Tana has no login, so only expose it to a trusted LAN or place it behind an authenticated reverse proxy, and keep the webhook endpoint private. Containers are published only on plain version tags; `:latest` always points at the newest tagged release, so `docker compose pull` after a release updates the running image.
+Exact per-session dates (within Jellyfin's activity-log window) come from the admin activity log, so give the API key **dashboard access** when you create it; without it Tana falls back to the per-item estimate alone. The example Compose file pulls the published `ghcr.io/divin/tana` image; no local Docker build is needed. It maps host port `8000` to container port `8000` on all host interfaces. Tana has no login, so only expose it to a trusted LAN or place it behind an authenticated reverse proxy. Containers are published only on plain version tags; `:latest` always points at the newest tagged release, so `docker compose pull` after a release updates the running image.
 
 ## 🎬 Watch tracking
 
-Tana records a movie or episode as watched only when Jellyfin sends a `PlaybackStop` event for the single user in `JELLYFIN_USER_ID` with `PlayedToCompletion=true` — or, when that flag is missing, when the stop reached `PLAYBACK_COMPLETION_THRESHOLD` (default `1.0`; valid `0.5`–`1.0`) of the runtime. Movie `PlaybackStart` events create a separate *started* state that never counts as a play: the UI shows `Started` with the started date, and shows prior verified plays as `Previously watched …` without implying the current start is complete. Local heart buttons mark items as favorites, and a `Mark watched` button on a started movie (with `Undo manual mark` to revert) records a manual correction that never fabricates a playback event — it does not increment play counts or add to the activity heatmap. Starts, progress, incomplete stops, duplicate deliveries, manual marks, and favorites never increment counts; the first completion is one play and later completions count as rewatches. Configure Jellyfin's Webhook plugin with both Playback Start and Playback Stop as described in [Jellyfin webhook setup](docs/jellyfin-webhook.md).
+Tana records a movie or episode as watched only when Jellyfin's state proves a completion: the item's `Played` flag is set, or its `PlayedPercentage` reaches `PLAYBACK_COMPLETION_THRESHOLD` (default `1.0`; valid `0.5`–`1.0`). `PlayCount` is deliberately not used as a completion counter — Jellyfin increases it every time playback *starts*, so a movie opened briefly on four devices would otherwise look like four watches.
+
+For a completed item, Tana estimates the watch count as `max(1, PlayCount − clearly-partial sessions in the activity-log window)`. A session whose merged start-to-stop span reaches the threshold of the item's runtime is stored with its exact completion date; a session clearly shorter than the runtime (a re-open, an abandoned start) never counts as a watch and never appears as a date. Unverifiable older plays are approximated at the item's `LastPlayedDate`. Marking an item **unplayed in Jellyfin** removes it from Tana on the next sync; items you have never completed never appear, no matter how often you started them.
+
+A movie currently in progress gets a separate *started* state that never counts as a play until completion: the UI shows `Started` with the started date, and prior verified plays as `Previously watched …` without implying the current start is complete. A flag button on every movie card shows whether it is watched (filled) or not (empty) and toggles the local manual correction on a started movie; manual marks never fabricate a playback event and do not increment play counts or add to the activity heatmap. Favorites and manual corrections are local; the first completion is one play and later completions count as rewatches.
+
+## ⚠️ Known limitations and how counts are estimated
+
+Jellyfin's API was not designed to expose watch history, so Tana has to reconstruct it and the numbers are estimates, not guarantees:
+
+- **`PlayCount` is a start counter, not a finish counter.** Jellyfin increments it whenever playback starts (`SessionManager.OnPlaybackStart`), so Tana never trusts it directly as “times watched”. It is only a bound.
+- **No per-session completion data exists.** The activity log records session start/stop times but not playback position, so Tana infers whether a session finished by comparing its wall-clock span to the item's runtime. This is reliable for short re-opens (a 20-second start is clearly not a watch), but a session that is paused for a long time or finished across multiple sessions can be misjudged.
+- **Exact sessions only reach back ~30 days** (server setting `ActivityLogRetentionDays`). Older plays cannot be dated precisely; they appear at the item's `LastPlayedDate`.
+- **`Played=true` may also come from marking an item played manually inside Jellyfin**; the API cannot distinguish that from a real completion.
+- **Dashboard access is required for the session window.** A restricted API key silently falls back to the per-item estimate (less accurate dates).
+- **The count for a completed item is capped at `max(1, PlayCount − clearly-partial recent sessions)`.** Brief re-opens no longer inflate it, but partial starts from before the session window, and multi-session finishes, can still tip the estimate.
+
+In short: “watched” means Jellyfin attests a completion; “N times” is Tana's best-effort figure.
 
 ## 📊 Web UI
 
-Tana's index page shows total plays and activity over time, media with posters, rewatch/started/manual labels, IMDb links for movies, kind/status/date filters and a favorites toggle, local favorite hearts, `Mark watched`/`Undo manual mark` controls on started movies, and 7/30-day statistics including started movies. Timeline data respects the configured `TZ`. The theme choice is stored locally in the browser. The app has no login; anyone who can reach it can also change favorites and manual state, so keep it on a trusted LAN or behind an authenticated reverse proxy.
+Tana's index page shows total plays and activity over time, media with posters, rewatch/started/manual labels, IMDb links for movies, kind/status/date filters and a favorites toggle, local favorite hearts and a watched-state flag, and 7/30-day statistics including started movies. Timeline data respects the configured `TZ`. The theme choice is stored locally in the browser. The app has no login; anyone who can reach it can also change favorites and manual state, so keep it on a trusted LAN or behind an authenticated reverse proxy.
 
 ## 💾 Data and privacy
 
-The SQLite database and resized poster files live together under the mapped host directory, so back them up together (for example stop the container and `tar -czf` the directory; Tana recreates posters on demand if the `posters/` folder is removed). Webhook bodies, item IDs, and secrets are never logged. Tana only talks to its configured Jellyfin server; it reports nowhere else.
+The SQLite database and resized poster files live together under the mapped host directory, so back them up together (for example stop the container and `tar -czf` the directory; Tana recreates posters on demand if the `posters/` folder is removed). Item IDs, API keys, and secrets are never logged. Tana only talks to its configured Jellyfin server; it reports nowhere else.
 
 ## ⬆️ Upgrading
 
-Version 2.0.0 uses SQLite schema version 4. A Tana 1.x database (schema version 3) is migrated in place on its first start: every watched row, completion event, poster-cache entry, and sync status is preserved, and existing rows become verified `watched` rows with no starts, manual marks, or favorites. Older experimental schema versions (1/2) are still reset to create a fresh database. Back up the data directory before upgrading, then start the new image — Tana performs the migration automatically. Favorites, manual corrections, and started-state timestamps survive restarts, syncs, and further upgrades.
+Version 3.0.0 is a complete backend rewrite that uses SQLite schema version 5 and no longer receives Jellyfin webhooks. On startup, any database whose schema version is not 5 (including older Tana 1.x/2.x data) is deleted and recreated fresh — the watch history is then rebuilt automatically from the Jellyfin API on the first sync. Favorites and manual corrections are local preferences; they only survive an upgrade when the history they refer to is rebuilt. Back up the data directory before upgrading and review the [3.0.0 roadmap](spec/version-3.md) for the full behavior contract.
 
 ## 🧪 Development
 

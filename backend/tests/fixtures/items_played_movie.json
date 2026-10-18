@@ -1,0 +1,38 @@
+{
+  "Name": "Played Movie 0",
+  "Id": "366ba45b-eb75-5e73-9d67-38cd5e32e810",
+  "DateCreated": "2024-06-28T08:40:08.0000000Z",
+  "HasSubtitles": true,
+  "Container": "mkv",
+  "PremiereDate": "2010-09-24T22:00:00.0000000Z",
+  "CriticRating": 95,
+  "OfficialRating": "R",
+  "ChannelId": null,
+  "CommunityRating": 7.305,
+  "RunTimeTicks": 75015890000,
+  "ProductionYear": 2010,
+  "ProviderIds": {
+    "Imdb": "tt0123456"
+  },
+  "IsFolder": false,
+  "Type": "Movie",
+  "UserData": {
+    "PlaybackPositionTicks": 0,
+    "PlayCount": 1,
+    "IsFavorite": false,
+    "LastPlayedDate": "2026-08-28T18:31:36.438Z",
+    "Played": true,
+    "ItemId": "366ba45beb755e739d6738cd5e32e810"
+  },
+  "VideoType": "VideoFile",
+  "ImageTags": {
+    "Logo": "e109b4a67c9d0bdf6ed39772dafbb17a",
+    "Thumb": "ecf2532c8c905ac5669c6932113c7eed",
+    "Primary": "2a0ffde17b4c8e57f3473a53e5fc247a"
+  },
+  "BackdropImageTags": [
+    "32853859fb57339207f1e090f1f0b003"
+  ],
+  "LocationType": "FileSystem",
+  "MediaType": "Video"
+}

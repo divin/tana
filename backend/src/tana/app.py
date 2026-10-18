@@ -22,8 +22,6 @@ from tana.jellyfin import JellyfinClient
 from tana.posters import PosterService
 from tana.scheduler import DailySyncScheduler
 from tana.sync import SyncService
-from tana.webhook_api import router as webhook_router
-from tana.webhooks import WebhookService
 
 
 def find_static_directory() -> Path:
@@ -57,7 +55,7 @@ def create_app(
             await database.dispose()
             raise
         jellyfin = JellyfinClient(app_settings)
-        sync_service = SyncService(database, jellyfin)
+        sync_service = SyncService(database, jellyfin, app_settings)
         scheduler = DailySyncScheduler(
             sync_service, app_settings.SYNC_TIME, app_settings.TZ
         )
@@ -65,12 +63,6 @@ def create_app(
         app.state.database = database
         app.state.jellyfin = jellyfin
         app.state.sync_service = sync_service
-        app.state.webhook_service = WebhookService(
-            database,
-            app_settings.JELLYFIN_USER_ID,
-            app_settings.PLAYBACK_COMPLETION_THRESHOLD,
-            jellyfin,
-        )
         app.state.scheduler = scheduler
         app.state.poster_service = PosterService(jellyfin, database.poster_path)
         initial_sync_task: asyncio.Task[None] | None = None
@@ -120,7 +112,6 @@ def create_app(
         return {"status": "ok"}
 
     app.include_router(api_router)
-    app.include_router(webhook_router)
     app.mount("/", StaticFiles(directory=site_directory, html=True), name="frontend")
     return app
 

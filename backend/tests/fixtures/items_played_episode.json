@@ -1,0 +1,41 @@
+{
+  "Name": "Played Episode 1",
+  "Id": "1b2fc2d3-ffd0-5942-badc-605ea9196891",
+  "DateCreated": "2022-01-16T23:41:28.0000000Z",
+  "HasSubtitles": true,
+  "Container": "mkv",
+  "PremiereDate": "2003-01-21T23:00:00.0000000Z",
+  "OfficialRating": "TV-MA",
+  "ChannelId": null,
+  "CommunityRating": 8.8,
+  "RunTimeTicks": 12993980000,
+  "ProductionYear": 2003,
+  "IndexNumber": 1,
+  "ParentIndexNumber": 1,
+  "ProviderIds": {
+    "Imdb": "tt0123456"
+  },
+  "IsFolder": false,
+  "Type": "Episode",
+  "UserData": {
+    "PlaybackPositionTicks": 0,
+    "PlayCount": 1,
+    "IsFavorite": false,
+    "LastPlayedDate": "2026-08-25T19:00:55.459Z",
+    "Played": true,
+    "ItemId": "1b2fc2d3ffd05942badc605ea9196891"
+  },
+  "SeriesName": "Series 0",
+  "SeriesPrimaryImageTag": "34b95a032231686b3f10cf27fb9a137f",
+  "SeasonName": "Season 1",
+  "VideoType": "VideoFile",
+  "ImageTags": {
+    "Primary": "378622e98bf0c05c68ecb6840663612b"
+  },
+  "BackdropImageTags": [],
+  "ParentLogoImageTag": "cd508e04af7e4eae444f39811565a105",
+  "ParentThumbImageTag": "72c334562a48da1c6bb60d7aa2da5595",
+  "ParentPrimaryImageTag": "4bdcddabe1cc6afe67ca5726aad90f13",
+  "LocationType": "FileSystem",
+  "MediaType": "Video"
+}
